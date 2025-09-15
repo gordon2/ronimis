@@ -19,7 +19,7 @@ go build -o `gym-server` server.go
 ./gym-server [port]                    # Default port: 8002
 
 # Open browser to http://localhost:8002/dashboard.html
-# Use "All time Data" for latest CSV or date range selector for specific periods
+# Use "Today" for latest CSV or date range selector for specific periods
 ```
 
 ## Data Collection
