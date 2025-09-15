@@ -11,7 +11,7 @@ A complete gym occupancy monitoring system with data collection, web dashboard, 
 
 ## Quick Start
 
-First, update the gym-config.env file with authentication tokens:
+First, update the `gym-config.env` file with authentication tokens:
 
 ```bash
 # Build and start the web server
