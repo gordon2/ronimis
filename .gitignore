@@ -1,0 +1,9 @@
+# Sensitive configuration files
+gym-config.env
+
+# Generated data files
+gym-data.json
+gym-stats-*.csv
+
+# Compiled binaries
+gym-server

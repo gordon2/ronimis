@@ -1,0 +1,199 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Gym Occupancy Over Time</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+    h1 { margin: 0 0 8px 0; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .sub { color: #555; }
+    .refresh-btn { background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .refresh-btn:hover { background: #0056b3; }
+    .refresh-btn:disabled { background: #6c757d; cursor: not-allowed; }
+    .date-input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    .status { margin-left: 8px; font-size: 14px; color: #28a745; }
+    #wrap { max-width: 1100px; }
+    canvas { width: 100%; height: 520px; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div class="header">
+      <div>
+        <h1>Gym Occupancy Over Time</h1>
+        <div class="sub">Today (2025-09-15) · Timezone: Europe/Tallinn · Points: 345 · Generated at: 2025-09-15 13:36:57</div>
+      </div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <label>From:</label>
+          <input type="date" id="fromDate" class="date-input">
+          <label>To:</label>
+          <input type="date" id="toDate" class="date-input">
+          <button id="refreshRangeBtn" class="refresh-btn" onclick="refreshDataRange()">Search</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button id="refreshBtn" class="refresh-btn" onclick="refreshData()">All time Data</button>
+          <span id="status" class="status"></span>
+        </div>
+      </div>
+    </div>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+  <script>
+    const ctx = document.getElementById('chart');
+	
+	let datasets = [];
+
+	async function loadData() {
+	  try {
+	    const response = await fetch('gym-data.json');
+	    const data = await response.json();
+	    datasets = data.map(ds => ({
+	  ...ds,
+	  parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+	  spanGaps: true,           
+	  pointRadius: 2,           
+	  borderWidth: 2
+	}));
+	    updateChart();
+	  } catch (error) {
+	    console.error('Error loading data:', error);
+	    document.getElementById('status').textContent = 'Error loading data';
+	  }
+	}
+
+	let chart;
+
+	function updateChart() {
+	  if (chart) {
+	    chart.data.datasets = datasets;
+	    chart.update();
+	  } else {
+	    chart = new Chart(ctx, {
+	  type: 'line',
+	  data: { datasets },
+	  options: {
+		
+		normalized: true,
+        interaction: { mode: 'nearest', intersect: false },
+        animation: false,
+        scales: {
+          x: {
+            type: 'time',
+            time: { tooltipFormat: 'yyyy-MM-dd HH:mm:ss' },
+            ticks: { autoSkip: true, maxRotation: 0 }
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'People' }
+          }
+        },
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              title: (items) => items[0].raw.x.replace('T',' ').replace('Z',''),
+              label: (item) => item.dataset.label + ': ' + item.raw.y
+            }
+          }
+        },
+        elements: { line: { tension: 0.2 } }
+      }
+    });
+	  }
+	}
+
+	async function refreshData() {
+	  const btn = document.getElementById('refreshBtn');
+	  const status = document.getElementById('status');
+
+	  btn.disabled = true;
+	  status.textContent = 'Generating data...';
+
+	  try {
+	    // First generate new data
+	    const generateResponse = await fetch('/generate-data', {
+	      method: 'POST',
+	      headers: { 'Content-Type': 'application/json' }
+	    });
+
+	    if (!generateResponse.ok) {
+	      throw new Error('Failed to generate data');
+	    }
+
+	    const generateResult = await generateResponse.json();
+	    if (!generateResult.success) {
+	      throw new Error(generateResult.error || 'Generation failed');
+	    }
+
+	    status.textContent = 'Loading updated data...';
+
+	    // Then load the updated data
+	    await loadData();
+	    status.textContent = '✓ Data refreshed';
+	    setTimeout(() => status.textContent = '', 3000);
+	  } catch (error) {
+	    console.error('Refresh error:', error);
+	    status.textContent = '✗ Refresh failed';
+	    setTimeout(() => status.textContent = '', 3000);
+	  } finally {
+	    btn.disabled = false;
+	  }
+	}
+
+	async function refreshDataRange() {
+	  const btn = document.getElementById('refreshRangeBtn');
+	  const status = document.getElementById('status');
+	  const fromDate = document.getElementById('fromDate').value;
+	  const toDate = document.getElementById('toDate').value;
+
+	  if (!fromDate || !toDate) {
+	    status.textContent = '✗ Please select both dates';
+	    setTimeout(() => status.textContent = '', 3000);
+	    return;
+	  }
+
+	  btn.disabled = true;
+	  status.textContent = 'Generating data for date range...';
+
+	  try {
+	    // Generate data for date range
+	    const generateResponse = await fetch('/generate-data-range', {
+	      method: 'POST',
+	      headers: { 'Content-Type': 'application/json' },
+	      body: JSON.stringify({ from: fromDate, to: toDate })
+	    });
+
+	    if (!generateResponse.ok) {
+	      throw new Error('Failed to generate data');
+	    }
+
+	    const generateResult = await generateResponse.json();
+	    if (!generateResult.success) {
+	      throw new Error(generateResult.error || 'Generation failed');
+	    }
+
+	    status.textContent = 'Loading updated data...';
+
+	    // Then load the updated data
+	    await loadData();
+	    status.textContent = '✓ Date range data refreshed';
+	    setTimeout(() => status.textContent = '', 3000);
+	  } catch (error) {
+	    console.error('Refresh error:', error);
+	    status.textContent = '✗ Refresh failed';
+	    setTimeout(() => status.textContent = '', 3000);
+	  } finally {
+	    btn.disabled = false;
+	  }
+	}
+
+	loadData();
+  </script>
+</body>
+</html>
