@@ -11,14 +11,8 @@ A complete gym occupancy monitoring system with data collection, web dashboard, 
 
 ## Quick Start
 
-### Setup
-First, create your configuration file with authentication tokens:
-```bash
-cp gym-config.env.example gym-config.env
-# Edit gym-config.env with your actual tokens and API key
-```
+First, update the gym-config.env file with authentication tokens:
 
-### Web Dashboard (Recommended)
 ```bash
 # Build and start the web server
 go build -o gym-server server.go
@@ -71,7 +65,7 @@ Expected CSV columns:
 
 ```
 ├── gym-stats-collector.sh      # Data collection script
-├── gym-config.env.example      # Configuration template
+├── gym-config.env      # Configuration file
 ├── server.go                   # Web server (main)
 ├── dashboard.html              # Interactive dashboard
 ├── gym-stats-filter.sh         # Analysis tool
