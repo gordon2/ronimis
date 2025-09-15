@@ -2,13 +2,6 @@
 
 A complete gym occupancy monitoring system with data collection, web dashboard, and interactive visualization using Chart.js.
 
-## Components
-
-- **Data Collection**: `gym-stats-collector.sh` - Automated gym occupancy data collection
-- **Web Server**: `server.go` - Interactive web dashboard with live data refresh
-- **Dashboard**: `dashboard.html` - Interactive chart visualization
-- **Analysis Tool**: `gym-stats-filter.sh` - Command-line data filtering and analysis
-
 ## Quick Start
 
 First, update the `gym-config.env` file with authentication tokens:
@@ -21,6 +14,13 @@ go build -o `gym-server` server.go
 # Open browser to http://localhost:8002/dashboard.html
 # Use "Today" for latest CSV or date range selector for specific periods
 ```
+
+## Components
+
+- **Data Collection**: `gym-stats-collector.sh` - Automated gym occupancy data collection
+- **Web Server**: `server.go` - Interactive web dashboard with live data refresh
+- **Dashboard**: `dashboard.html` - Interactive chart visualization
+- **Analysis Tool**: `gym-stats-filter.sh` - Command-line data filtering and analysis
 
 ## Data Collection
 
