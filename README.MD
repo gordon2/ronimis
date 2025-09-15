@@ -15,7 +15,7 @@ First, update the gym-config.env file with authentication tokens:
 
 ```bash
 # Build and start the web server
-go build -o gym-server server.go
+go build -o `gym-server` server.go
 ./gym-server [port]                    # Default port: 8002
 
 # Open browser to http://localhost:8002/dashboard.html
