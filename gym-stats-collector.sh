@@ -38,10 +38,6 @@ if [ -f "$CONFIG_FILE" ]; then
 else
     echo "Error: Configuration file '$CONFIG_FILE' not found!"
     echo "Please create $CONFIG_FILE with your authentication tokens:"
-    echo "XSRF_TOKEN=your_xsrf_token_here"
-    echo "LARAVEL_SESSION=your_laravel_session_here"
-    echo "PHPSESSID=your_phpsessid_here"
-    echo "API_KEY=your_api_key_here"
     exit 1
 fi
 
