@@ -4,12 +4,20 @@ A complete gym occupancy monitoring system with data collection, web dashboard, 
 
 ## Quick Start
 
-First, update the `gym-config.env` file with authentication tokens:
+### Data Collection
+
+The `gym-stats-collector.sh` script automatically collects gym occupancy data:
+
+```bash
+./gym-stats-collector.sh
+```
+
+Update the `gym-config.env` file with authentication tokens:
 
 ```bash
 # Build and start the web server
-go build -o `gym-server` server.go
-./gym-server [port]                    # Default port: 8002
+go build -o gym-server server.go
+./gym-server [port]                  # Default port: 8002
 
 # Open browser to http://localhost:8002/dashboard.html
 # Use "Today" for latest CSV or date range selector for specific periods
@@ -22,14 +30,6 @@ go build -o `gym-server` server.go
 - **Dashboard**: `dashboard.html` - Interactive chart visualization
 - **Analysis Tool**: `gym-stats-filter.sh` - Command-line data filtering and analysis
 
-## Data Collection
-
-The `gym-stats-collector.sh` script automatically collects gym occupancy data:
-
-### Usage
-```bash
-./gym-stats-collector.sh               # Collect current data
-```
 
 Generates CSV files in format: `gym-stats-YYYYMMDD.csv`
 
