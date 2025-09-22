@@ -31,6 +31,11 @@ sudo systemctl daemon-reload
 sudo systemctl restart gym.service gym-stats-collector.service
 ```
 
+### Quick deploy
+```
+SERVER_IP=<00.00.000.000> SERVER_USER=<username> ./deploy.sh
+```
+
 ## Components
 
 - **Data Collection**: `gym-stats-collector.sh` - Automated gym occupancy data collection
