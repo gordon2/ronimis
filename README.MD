@@ -23,6 +23,14 @@ go build -o gym-server server.go
 # Use "Today" for latest CSV or date range selector for specific periods
 ```
 
+### Services
+Place the files from directory `services` to `/etc/systemd/system/`
+
+```
+sudo systemctl daemon-reload
+sudo systemctl restart gym.service gym-stats-collector.service
+```
+
 ## Components
 
 - **Data Collection**: `gym-stats-collector.sh` - Automated gym occupancy data collection

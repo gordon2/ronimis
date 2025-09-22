@@ -1,0 +1,20 @@
+[Unit]
+Description=Gym stats collector (looping script)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=dmytro
+WorkingDirectory=/home/dmytro/ronimis
+EnvironmentFile=-/home/dmytro/ronimis/gym-config.env
+ExecStart=/home/dmytro/ronimis/gym-stats-collector.sh
+Restart=always
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=multi-user.target

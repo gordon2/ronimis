@@ -1,0 +1,19 @@
+[Unit]
+Description=Gym server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=dmytro
+WorkingDirectory=/home/dmytro/ronimis
+EnvironmentFile=-/home/dmytro/ronimis/gym-config.env
+ExecStartPre=/usr/local/go/bin/go build -o gym-server server.go
+ExecStart=/home/dmytro/ronimis/gym-server
+Restart=always
+RestartSec=5s
+# Hardening (kept minimal so /home is usable)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
