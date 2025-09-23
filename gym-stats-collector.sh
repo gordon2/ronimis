@@ -45,7 +45,7 @@ fi
 COOKIES="PHPSESSID=${PHPSESSID}; XSRF-TOKEN=${XSRF_TOKEN}; laravel_session=${LARAVEL_SESSION}"
 
 collect_data() {
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    timestamp=$(date -u '+%Y-%m-%d %H:%M:%S')
     log_file="$(get_log_file)"
 
     # Ensure CSV header exists for today's file

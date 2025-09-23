@@ -199,20 +199,34 @@ func processCSVFile(csvFile string, dataByLocation map[string][]DataPoint) error
 			continue
 		}
 
-		// Parse timestamp
+		// Parse timestamp from CSV (stored as UTC)
 		timestamp := record[timestampIdx]
 		t, err := time.Parse("2006-01-02 15:04:05", timestamp)
 		if err != nil {
 			continue
 		}
 
-		// Round to a nearest 2-minute interval
-		minute := t.Minute()
-		roundedMinute := (minute / 2) * 2
-		t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), roundedMinute, 0, 0, t.Location())
+		// Treat the timestamp as UTC (since collector script now uses `date -u`)
+		utcTime := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
 
-		// Convert to ISO format with a fixed +03:00 timezone (Europe/Tallinn)
-		isoTimestamp := t.Format("2006-01-02T15:04:05") + "+03:00"
+		// Load Estonia/Tallinn timezone
+		tallinnTZ, err := time.LoadLocation("Europe/Tallinn")
+		if err != nil {
+			// Fallback to fixed offset if timezone loading fails
+			tallinnTZ = time.FixedZone("EET", 2*3600) // UTC+2 as fallback
+		}
+
+		// Convert UTC time to Tallinn timezone
+		tallinnTime := utcTime.In(tallinnTZ)
+
+		// Round to a nearest 2-minute interval
+		minute := tallinnTime.Minute()
+		roundedMinute := (minute / 2) * 2
+		tallinnTime = time.Date(tallinnTime.Year(), tallinnTime.Month(), tallinnTime.Day(),
+			tallinnTime.Hour(), roundedMinute, 0, 0, tallinnTZ)
+
+		// Format as ISO timestamp with proper timezone offset
+		isoTimestamp := tallinnTime.Format("2006-01-02T15:04:05-07:00")
 
 		// Parse user count
 		userCount, err := strconv.Atoi(record[userCountIdx])
