@@ -225,8 +225,8 @@ func processCSVFile(csvFile string, dataByLocation map[string][]DataPoint) error
 		tallinnTime = time.Date(tallinnTime.Year(), tallinnTime.Month(), tallinnTime.Day(),
 			tallinnTime.Hour(), roundedMinute, 0, 0, tallinnTZ)
 
-		// Format as ISO timestamp with proper timezone offset
-		isoTimestamp := tallinnTime.Format("2006-01-02T15:04:05-07:00")
+		// Format with day of week and abbreviated month (e.g., "Tuesday, Sep 23, 2025 10:20")
+		isoTimestamp := tallinnTime.Format("Mon, Jan 2, 2006 15:04")
 
 		// Parse user count
 		userCount, err := strconv.Atoi(record[userCountIdx])

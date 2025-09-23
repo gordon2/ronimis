@@ -4,23 +4,18 @@ A complete gym occupancy monitoring system with data collection, web dashboard, 
 
 ## Quick Start
 
-### Data Collection
-
-The `gym-stats-collector.sh` script automatically collects gym occupancy data:
+1. The `gym-stats-collector.sh` script automatically collects gym occupancy data:
 
 ```bash
 ./gym-stats-collector.sh
 ```
 
-Update the `gym-config.env` file with authentication tokens:
+2. Update the `gym-config.env` file with authentication tokens:
 
+3. Build and start the web server
 ```bash
-# Build and start the web server
 go build -o gym-server server.go
-./gym-server [port]                  # Default port: 8002
-
-# Open browser to http://localhost:8002/dashboard.html
-# Use "Today" for latest CSV or date range selector for specific periods
+./gym-server 8002
 ```
 
 ### Services
@@ -32,6 +27,7 @@ sudo systemctl restart gym.service gym-stats-collector.service
 ```
 
 ### Quick deploy
+Uploads relevant source files and restarts services
 ```
 SERVER_IP=<00.00.000.000> SERVER_USER=<username> ./deploy.sh
 ```
@@ -71,17 +67,4 @@ Expected CSV columns:
 
 # Show summary statistics
 ./gym-stats-filter.sh --summary
-```
-
-
-## File Structure
-
-```
-├── gym-stats-collector.sh      # Data collection script
-├── gym-config.env      # Configuration file
-├── server.go                   # Web server (main)
-├── dashboard.html              # Interactive dashboard
-├── gym-stats-filter.sh         # Analysis tool
-├── gym-stats-YYYYMMDD.csv      # Data files
-└── gym-data.json               # Generated chart data
 ```

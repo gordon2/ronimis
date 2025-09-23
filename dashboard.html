@@ -23,7 +23,6 @@
     <div class="header">
       <div>
         <h1>Gym Occupancy Over Time</h1>
-        <div class="sub">Today (2025-09-15) · Timezone: Europe/Tallinn · Points: 345 · Generated at: 2025-09-15 13:36:57</div>
       </div>
       <div>
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -44,6 +43,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+  <script>
+    // Register the annotation plugin
+    Chart.register(ChartAnnotation);
+  </script>
   <script>
     const ctx = document.getElementById('chart');
 	
@@ -69,16 +73,49 @@
 
 	let chart;
 
+	function getDaySeparators() {
+	  const separators = {};
+	  const uniqueDays = new Set();
+
+	  // Collect all unique days from datasets
+	  datasets.forEach(dataset => {
+	    dataset.data.forEach(point => {
+	      // Parse our custom format: "Mon, Sep 23, 2025 10:20"
+	      const date = new Date(point.x);
+	      const dayKey = date.getFullYear() + '-' +
+	                    String(date.getMonth() + 1).padStart(2, '0') + '-' +
+	                    String(date.getDate()).padStart(2, '0');
+	      uniqueDays.add(dayKey);
+	    });
+	  });
+
+	  // Create vertical lines at start of each day (midnight)
+	  Array.from(uniqueDays).sort().forEach((dayKey, index) => {
+	    separators[`day${index}`] = {
+	      type: 'line',
+	      xMin: dayKey + ' 00:00',
+	      xMax: dayKey + ' 00:00',
+	      borderColor: 'rgba(0,0,0,0.4)',
+	      borderWidth: 2,
+	      borderDash: [5, 5]
+	    };
+	  });
+
+	  return separators;
+	}
+
 	function updateChart() {
 	  if (chart) {
 	    chart.data.datasets = datasets;
+	    // Update annotations
+	    chart.options.plugins.annotation.annotations = getDaySeparators();
 	    chart.update();
 	  } else {
 	    chart = new Chart(ctx, {
 	  type: 'line',
 	  data: { datasets },
 	  options: {
-		
+
 		normalized: true,
         interaction: { mode: 'nearest', intersect: false },
         animation: false,
@@ -94,6 +131,9 @@
           }
         },
         plugins: {
+          annotation: {
+            annotations: getDaySeparators()
+          },
           legend: { position: 'bottom' },
           tooltip: {
             callbacks: {
