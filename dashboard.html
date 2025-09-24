@@ -14,7 +14,7 @@
     .refresh-btn:disabled { background: #6c757d; cursor: not-allowed; }
     .date-input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
     .status { margin-left: 8px; font-size: 14px; color: #28a745; }
-    #wrap { max-width: 1100px; }
+    #wrap { width: 100%; }
     canvas { width: 100%; height: 520px; }
   </style>
 </head>
@@ -59,9 +59,13 @@
 	    const data = await response.json();
 	    datasets = data.map(ds => ({
 	  ...ds,
+	  data: ds.data.map(point => ({
+	    ...point,
+	    x: point.x.replace(/[+-]\d{2}:\d{2}$/, '') // Strip timezone offset
+	  })),
 	  parsing: { xAxisKey: 'x', yAxisKey: 'y' },
-	  spanGaps: true,           
-	  pointRadius: 2,           
+	  spanGaps: true,
+	  pointRadius: 2,
 	  borderWidth: 2
 	}));
 	    updateChart();
@@ -122,7 +126,15 @@
         scales: {
           x: {
             type: 'time',
-            time: { tooltipFormat: 'yyyy-MM-dd HH:mm:ss' },
+            time: {
+              tooltipFormat: 'yyyy-MM-dd HH:mm:ss',
+              displayFormats: {
+                hour: 'HH:mm',
+                day: 'MMM dd',
+                week: 'MMM dd',
+                month: 'MMM yyyy'
+              }
+            },
             ticks: { autoSkip: true, maxRotation: 0 }
           },
           y: {
