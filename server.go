@@ -162,11 +162,13 @@ func processCSVFile(csvFile string, dataByLocation map[string][]DataPoint) error
 	}
 
 	// Find column indices
-	var timestampIdx, locationNameIdx, userCountIdx, statusIdx int = -1, -1, -1, -1
+	var timestampIdx, timezoneIdx, locationNameIdx, userCountIdx, statusIdx int = -1, -1, -1, -1, -1
 	for i, header := range headers {
 		switch header {
 		case "timestamp":
 			timestampIdx = i
+		case "timezone":
+			timezoneIdx = i
 		case "location_name":
 			locationNameIdx = i
 		case "user_count":
@@ -176,7 +178,7 @@ func processCSVFile(csvFile string, dataByLocation map[string][]DataPoint) error
 		}
 	}
 
-	if timestampIdx == -1 || locationNameIdx == -1 || userCountIdx == -1 || statusIdx == -1 {
+	if timestampIdx == -1 || timezoneIdx == -1 || locationNameIdx == -1 || userCountIdx == -1 || statusIdx == -1 {
 		return fmt.Errorf("missing required columns in CSV")
 	}
 
@@ -189,7 +191,7 @@ func processCSVFile(csvFile string, dataByLocation map[string][]DataPoint) error
 			continue
 		}
 
-		maxIdx := max2(max2(timestampIdx, locationNameIdx), max2(userCountIdx, statusIdx))
+		maxIdx := max2(max2(max2(timestampIdx, timezoneIdx), max2(locationNameIdx, userCountIdx)), statusIdx)
 		if len(record) <= maxIdx {
 			continue
 		}
@@ -199,25 +201,40 @@ func processCSVFile(csvFile string, dataByLocation map[string][]DataPoint) error
 			continue
 		}
 
-		// Parse timestamp from CSV (stored as UTC)
+		// Parse timestamp from CSV
 		timestamp := record[timestampIdx]
 		t, err := time.Parse("2006-01-02 15:04:05", timestamp)
 		if err != nil {
 			continue
 		}
 
-		// Treat the timestamp as UTC (since collector script now uses `date -u`)
-		utcTime := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
-
-		// Load Estonia/Tallinn timezone
+		// Load Estonia/Tallinn timezone for display (gyms are in Tallinn)
 		tallinnTZ, err := time.LoadLocation("Europe/Tallinn")
 		if err != nil {
 			// Fallback to fixed offset if timezone loading fails
 			tallinnTZ = time.FixedZone("EET", 2*3600) // UTC+2 as fallback
 		}
 
-		// Convert UTC time to Tallinn timezone
-		tallinnTime := utcTime.In(tallinnTZ)
+		var sourceTime time.Time
+
+		// Handle timezone field if available, otherwise assume UTC (for legacy files)
+		if timezoneIdx != -1 && len(record) > timezoneIdx {
+			timezoneStr := record[timezoneIdx]
+
+			// Parse timestamp with its original timezone
+			timestampWithTZ := timestamp + " " + timezoneStr
+			sourceTime, err = time.Parse("2006-01-02 15:04:05 MST", timestampWithTZ)
+			if err != nil {
+				// Fallback: treat as UTC if timezone parsing fails
+				sourceTime = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
+			}
+		} else {
+			// Legacy files without timezone field - assume UTC
+			sourceTime = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
+		}
+
+		// Always convert to Tallinn timezone for display (since gyms are in Tallinn)
+		tallinnTime := sourceTime.In(tallinnTZ)
 
 		// Round to a nearest 2-minute interval
 		minute := tallinnTime.Minute()
@@ -225,8 +242,8 @@ func processCSVFile(csvFile string, dataByLocation map[string][]DataPoint) error
 		tallinnTime = time.Date(tallinnTime.Year(), tallinnTime.Month(), tallinnTime.Day(),
 			tallinnTime.Hour(), roundedMinute, 0, 0, tallinnTZ)
 
-		// Format with day of week and abbreviated month (e.g., "Tuesday, Sep 23, 2025 10:20")
-		isoTimestamp := tallinnTime.Format("Mon, Jan 2, 2006 15:04")
+		// Format as ISO timestamp with timezone for proper JavaScript parsing
+		isoTimestamp := tallinnTime.Format("2006-01-02T15:04:05Z07:00")
 
 		// Parse user count
 		userCount, err := strconv.Atoi(record[userCountIdx])

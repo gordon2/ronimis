@@ -26,7 +26,7 @@ get_log_file() {
 ensure_csv_header() {
     local log_file="$1"
     if [ ! -f "$log_file" ]; then
-        echo "timestamp,location_id,location_name,user_count,status,response" > "$log_file"
+        echo "timestamp,timezone,location_id,location_name,user_count,status,response" > "$log_file"
     fi
 }
 
@@ -45,7 +45,8 @@ fi
 COOKIES="PHPSESSID=${PHPSESSID}; XSRF-TOKEN=${XSRF_TOKEN}; laravel_session=${LARAVEL_SESSION}"
 
 collect_data() {
-    timestamp=$(date -u '+%Y-%m-%d %H:%M:%S')
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    timezone=$(date '+%Z')
     log_file="$(get_log_file)"
 
     # Ensure CSV header exists for today's file
@@ -80,10 +81,10 @@ collect_data() {
         if [ "$http_code" = "200" ]; then
             # Try to extract user count from JSON
             user_count=$(echo "$body" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('total', 'unknown'))" 2>/dev/null || echo "parse_error")
-            echo "$timestamp,$location_id,$location_name,$user_count,success,\"$body\"" >> "$log_file"
+            echo "$timestamp,$timezone,$location_id,$location_name,$user_count,success,\"$body\"" >> "$log_file"
             echo "  -> Users: $user_count"
         else
-            echo "$timestamp,$location_id,$location_name,error,$http_code,\"$body\"" >> "$log_file"
+            echo "$timestamp,$timezone,$location_id,$location_name,error,$http_code,\"$body\"" >> "$log_file"
             echo "  -> ERROR: HTTP $http_code"
 
             # If auth error, remind user to update tokens
