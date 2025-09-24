@@ -149,7 +149,20 @@
           legend: { position: 'bottom' },
           tooltip: {
             callbacks: {
-              title: (items) => items[0].raw.x.replace('T',' ').replace('Z',''),
+              title: (items) => {
+                const date = new Date(items[0].raw.x);
+                const options = {
+                  weekday: 'short',
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false
+                };
+                return date.toLocaleString('en-US', options);
+              },
               label: (item) => item.dataset.label + ': ' + item.raw.y
             }
           }
