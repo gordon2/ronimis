@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -442,6 +444,97 @@ func generateDataRangeHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func downloadCSVsHandler(w http.ResponseWriter, r *http.Request) {
+	// Enable CORS
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Find all CSV files
+	files, err := filepath.Glob("gym-stats-*.csv")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Error finding CSV files"))
+		return
+	}
+
+	if len(files) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("No CSV files found"))
+		return
+	}
+
+	// Generate filename with current date and time in format "1-sep-2025_00-00-00.zip"
+	now := time.Now()
+	monthName := strings.ToLower(now.Month().String()[:3])
+	filename := fmt.Sprintf("gym-stats-%d-%s-%d_%02d-%02d-%02d.zip",
+		now.Day(),
+		monthName,
+		now.Year(),
+		now.Hour(),
+		now.Minute(),
+		now.Second())
+
+	// Set headers for ZIP download
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+
+	// Create ZIP writer
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+
+	// Add each CSV file to the ZIP
+	for _, filePath := range files {
+		err := addFileToZip(zipWriter, filePath)
+		if err != nil {
+			log.Printf("Error adding file %s to zip: %v", filePath, err)
+			continue
+		}
+	}
+}
+
+func addFileToZip(zipWriter *zip.Writer, filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Get file info for the header
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	// Create ZIP file header
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+	header.Name = filepath.Base(filePath)
+	header.Method = zip.Deflate
+
+	// Create the file in the ZIP
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	// Copy file content to ZIP
+	_, err = io.Copy(writer, file)
+	return err
+}
+
 func corsHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -470,11 +563,13 @@ func main() {
 	// Data generation endpoints
 	http.HandleFunc("/generate-data", generateDataHandler)
 	http.HandleFunc("/generate-data-range", generateDataRangeHandler)
+	http.HandleFunc("/download-csvs", downloadCSVsHandler)
 
 	fmt.Printf("Server running at http://localhost:%s/\n", port)
 	fmt.Printf("Dashboard: http://localhost:%s/dashboard.html\n", port)
 	fmt.Printf("Generate data: POST to http://localhost:%s/generate-data\n", port)
 	fmt.Printf("Generate data range: POST to http://localhost:%s/generate-data-range\n", port)
+	fmt.Printf("Download CSVs: GET http://localhost:%s/download-csvs\n", port)
 
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal("Server failed to start:", err)

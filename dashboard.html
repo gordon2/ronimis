@@ -34,6 +34,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <button id="refreshBtn" class="refresh-btn" onclick="refreshData()">Today</button>
+          <button id="downloadBtn" class="refresh-btn" onclick="downloadAllCSVs()">Download CSVs</button>
           <span id="status" class="status"></span>
         </div>
       </div>
@@ -256,6 +257,28 @@
 	  } finally {
 	    btn.disabled = false;
 	  }
+	}
+
+	function downloadAllCSVs() {
+	  const btn = document.getElementById('downloadBtn');
+	  const status = document.getElementById('status');
+
+	  btn.disabled = true;
+	  status.textContent = 'Preparing download...';
+
+	  // Create a temporary link element and trigger download
+	  const link = document.createElement('a');
+	  link.href = '/download-csvs';
+	  link.download = 'gym-stats-data.zip';
+	  document.body.appendChild(link);
+	  link.click();
+	  document.body.removeChild(link);
+
+	  status.textContent = '✓ Download started';
+	  setTimeout(() => {
+	    status.textContent = '';
+	    btn.disabled = false;
+	  }, 2000);
 	}
 
 	loadData();
