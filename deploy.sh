@@ -11,7 +11,7 @@ echo "Deploying to ${SERVER_USER}@${SERVER_IP}..."
 
 # Upload application files
 echo "Uploading application files..."
-scp server.go gym-stats-collector.sh dashboard.html ${SERVER_USER}@${SERVER_IP}:/home/${SERVER_USER}/ronimis/
+scp server.go gym-stats-collector.sh dashboard.html busyness.html ${SERVER_USER}@${SERVER_IP}:/home/${SERVER_USER}/ronimis/
 
 # Upload service files
 echo "Uploading service files..."
