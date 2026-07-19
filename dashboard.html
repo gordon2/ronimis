@@ -307,8 +307,18 @@
 
       let hourAvg = [];
       for (let h = 0; h < 24; h++) { let s = 0, c = 0; for (let dd = 0; dd < 7; dd++) if (loc.samples[dd][h] > 0) { s += loc.avg[dd][h]; c++; } hourAvg[h] = c ? s / c : null; }
-      let bH = null, best = null;
-      hourAvg.forEach((v, h) => { if (v == null) return; if (bH == null || v > hourAvg[bH]) bH = h; if (v > 0 && (best == null || v < hourAvg[best])) best = h; });
+      let bH = null;
+      hourAvg.forEach((v, h) => { if (v == null) return; if (bH == null || v > hourAvg[bH]) bH = h; });
+      // Best time to go = quietest hour still within the gym's active window
+      // (typical use >= 25% of the peak hour), so it never returns dead-of-night hours.
+      let best = null;
+      if (bH != null && hourAvg[bH] > 0) {
+        const activeThreshold = hourAvg[bH] * 0.25;
+        hourAvg.forEach((v, h) => {
+          if (v == null || v < activeThreshold) return;
+          if (best == null || v < hourAvg[best]) best = h;
+        });
+      }
 
       let peak = { v: -1, d: 0, h: 0 };
       for (let dd = 0; dd < 7; dd++) for (let h = 0; h < 24; h++) if (loc.avg[dd][h] > peak.v) peak = { v: loc.avg[dd][h], d: dd, h };
@@ -319,7 +329,7 @@
       if (bD != null) rows.push(['Busiest day', DAY_FULL[days[bD]]]);
       if (qD != null) rows.push(['Quietest day', DAY_FULL[days[qD]]]);
       if (bH != null) rows.push(['Busiest time', hh(bH)]);
-      if (best != null) rows.push(['Quietest open time', hh(best)]);
+      if (best != null) rows.push(['Best time to go', hh(best)]);
       if (peak.v >= 0) rows.push(['Typical peak', Math.round(peak.v) + ' · ' + days[peak.d] + ' ' + hh(peak.h)]);
 
       card.innerHTML = '<h3><span class="dot" style="background:' + colorFor(loc.name, idx) + '"></span>' + loc.name + '</h3>' +
