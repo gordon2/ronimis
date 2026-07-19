@@ -14,7 +14,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+)
+
+var (
+	rangeCacheMu sync.Mutex
+	rangeCache   = map[string][]Dataset{}
 )
 
 type DataPoint struct {
@@ -890,7 +896,46 @@ func generateDataRangeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Convert CSV files to JSON
+	// Compute newest modification time across the in-range files so the cache
+	// key auto-invalidates whenever any underlying file changes (e.g. today's
+	// still-growing file gets a new reading appended).
+	var maxMtime int64
+	for _, f := range csvFiles {
+		info, statErr := os.Stat(f)
+		if statErr != nil {
+			continue
+		}
+		if m := info.ModTime().Unix(); m > maxMtime {
+			maxMtime = m
+		}
+	}
+	key := dateRange.From + "|" + dateRange.To + "|" + strconv.FormatInt(maxMtime, 10)
+
+	bucketMinutes := 2
+	fromDate, fromErr := time.Parse("2006-01-02", dateRange.From)
+	toDate, toErr := time.Parse("2006-01-02", dateRange.To)
+	if fromErr == nil && toErr == nil {
+		bucketMinutes = pickBucketMinutes(fromDate, toDate.AddDate(0, 0, 1))
+	}
+
+	rangeCacheMu.Lock()
+	defer rangeCacheMu.Unlock()
+
+	// Cache HIT: serve the prebuilt datasets, skipping the CSV read, downsample
+	// and the gym-data.json write entirely.
+	if cached, ok := rangeCache[key]; ok {
+		output := fmt.Sprintf("Served %d files (%s to %s) from cache\nFound %d locations with data (bucket: %d min)",
+			len(csvFiles), dateRange.From, dateRange.To, len(cached), bucketMinutes)
+		json.NewEncoder(w).Encode(GenerateResponse{
+			Success:  true,
+			Message:  "Date range data generated successfully",
+			Output:   output,
+			Datasets: cached,
+		})
+		return
+	}
+
+	// Cache MISS: build from CSV files.
 	datasets, err := convertCSVFilesToJSON(csvFiles)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -902,11 +947,7 @@ func generateDataRangeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Downsample wide ranges so the chart stays readable and fast
-	bucketMinutes := 2
-	fromDate, fromErr := time.Parse("2006-01-02", dateRange.From)
-	toDate, toErr := time.Parse("2006-01-02", dateRange.To)
 	if fromErr == nil && toErr == nil {
-		bucketMinutes = pickBucketMinutes(fromDate, toDate.AddDate(0, 0, 1))
 		datasets = downsampleDatasets(datasets, bucketMinutes)
 	}
 
@@ -932,6 +973,13 @@ func generateDataRangeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Store in the cache under the mtime-keyed entry. Bound growth with a simple
+	// reset since keys accumulate across ranges and data mutations.
+	if len(rangeCache) > 64 {
+		rangeCache = map[string][]Dataset{}
+	}
+	rangeCache[key] = datasets
 
 	// Success response
 	output := fmt.Sprintf("Successfully generated gym-data.json from %d files (%s to %s)\nFound %d locations with data (bucket: %d min)",
