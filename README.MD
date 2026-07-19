@@ -59,6 +59,12 @@ launchctl bootout gui/$(id -u)/com.ronimis.gym-backup
 ```
 Logs: `~/Library/Logs/ronimis-gym-collector.log`, `ronimis-gym-server.log`, `ronimis-gym-backup.log`
 
+**Keeping it awake:** the agents run while you're logged in and survive screen lock
+and app crashes, but full system sleep — idle sleep, or **closing a laptop lid** —
+pauses collection (the process is frozen and resumes on wake, leaving a gap in the
+data for that window). A logout also stops the agents until the next login. To
+collect gap-free on a laptop, keep the Mac awake with something like **Amphetamine**.
+
 ### Backups
 CSV history is backed up to the repo's **`data` branch** (kept separate from `main`
 so code history stays clean). `backup.sh` commits the runtime CSVs and pushes to
