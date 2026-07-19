@@ -35,6 +35,15 @@
     .card .r .k { color: #666; }
     .card .r .v { color: #111; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
     .card .none { color: #999; font-size: 13px; }
+
+    .fresh { display: inline-block; margin-top: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; font-weight: 600; cursor: default; }
+    .fresh .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .fresh-live { background: #e7f7ed; color: #127a3e; }
+    .fresh-live .dot { background: #16a34a; }
+    .fresh-delayed { background: #fdf4e3; color: #8a5a00; }
+    .fresh-delayed .dot { background: #e0a106; }
+    .fresh-stale { background: #fdeaea; color: #a41c1c; }
+    .fresh-stale .dot { background: #dc2626; }
   </style>
 </head>
 <body>
@@ -43,6 +52,7 @@
       <div>
         <h1>Gym Occupancy Over Time</h1>
         <a href="busyness.html" style="font-size:14px;color:#007bff;text-decoration:none;">Typical busyness →</a>
+        <div><span id="freshness" class="fresh"></span></div>
       </div>
       <div>
         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -393,6 +403,33 @@
       apply('none');
     });
 
+    // ---- data freshness badge ----
+    function formatAge(s) {
+      if (s < 60) return s + 's';
+      if (s < 3600) return Math.floor(s / 60) + 'm';
+      if (s < 86400) { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h + 'h' + (m ? ' ' + m + 'm' : ''); }
+      const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600); return d + 'd' + (h ? ' ' + h + 'h' : '');
+    }
+    async function pollStatus() {
+      const el = document.getElementById('freshness');
+      try {
+        const s = await (await fetch('status', { cache: 'no-store' })).json();
+        if (!s.latest || s.ageSeconds == null || s.ageSeconds < 0) {
+          el.className = 'fresh fresh-stale'; el.innerHTML = '<span class="dot"></span>No data collected'; el.title = ''; return;
+        }
+        const age = s.ageSeconds;
+        let cls, label;
+        if (age < 300) { cls = 'fresh-live'; label = 'Live · updated ' + formatAge(age) + ' ago'; }
+        else if (age < 1800) { cls = 'fresh-delayed'; label = 'Delayed · ' + formatAge(age) + ' ago'; }
+        else { cls = 'fresh-stale'; label = 'Collection stalled · ' + formatAge(age) + ' ago'; }
+        el.className = 'fresh ' + cls;
+        el.innerHTML = '<span class="dot"></span>' + label;
+        el.title = (s.locations || []).map(l => l.name + ': ' + l.count).join('   ·   ');
+      } catch (e) {
+        el.className = 'fresh fresh-stale'; el.innerHTML = '<span class="dot"></span>status unavailable';
+      }
+    }
+
     async function init() {
       try {
         const res = await fetch('busyness-data');
@@ -403,6 +440,8 @@
       apply('replace'); // normalize the initial entry; don't add a phantom one
     }
     init();
+    pollStatus();
+    setInterval(pollStatus, 60000);
   </script>
 </body>
 </html>

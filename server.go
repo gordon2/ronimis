@@ -620,6 +620,147 @@ func busynessDataHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type StatusLocation struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+	At    string `json:"at"`
+}
+
+type StatusResponse struct {
+	Latest     string           `json:"latest"`
+	AgeSeconds int64            `json:"ageSeconds"`
+	Locations  []StatusLocation `json:"locations"`
+}
+
+// statusHandler reports the most recent reading and its age, reading only the
+// latest CSV file so it is cheap to poll for a "data freshness" indicator.
+func statusHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	tallinn, err := time.LoadLocation("Europe/Tallinn")
+	if err != nil {
+		tallinn = time.FixedZone("EET", 2*3600)
+	}
+
+	resp := StatusResponse{AgeSeconds: -1, Locations: []StatusLocation{}}
+
+	csvFile, err := findLatestCSV()
+	if err != nil {
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+	file, err := os.Open(csvFile)
+	if err != nil {
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.LazyQuotes = true
+	reader.FieldsPerRecord = -1
+	headers, err := reader.Read()
+	if err != nil {
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+	tsIdx, tzIdx, locIdx, cntIdx, stIdx := -1, -1, -1, -1, -1
+	for i, h := range headers {
+		switch h {
+		case "timestamp":
+			tsIdx = i
+		case "timezone":
+			tzIdx = i
+		case "location_name":
+			locIdx = i
+		case "user_count":
+			cntIdx = i
+		case "status":
+			stIdx = i
+		}
+	}
+	if tsIdx == -1 || locIdx == -1 || cntIdx == -1 || stIdx == -1 {
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	type latest struct {
+		count int
+		at    time.Time
+	}
+	byLoc := map[string]latest{}
+	var maxInstant time.Time
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue
+		}
+		maxIdx := max2(max2(max2(tsIdx, tzIdx), max2(locIdx, cntIdx)), stIdx)
+		if len(record) <= maxIdx {
+			continue
+		}
+		if record[stIdx] != "success" {
+			continue
+		}
+		count, err := strconv.Atoi(record[cntIdx])
+		if err != nil {
+			continue
+		}
+		tzVal := ""
+		if tzIdx != -1 {
+			tzVal = record[tzIdx]
+		}
+		inst, ok := busynessLocalTime(record[tsIdx], tzVal, tallinn)
+		if !ok {
+			continue
+		}
+		name := record[locIdx]
+		if cur, exists := byLoc[name]; !exists || inst.After(cur.at) {
+			byLoc[name] = latest{count: count, at: inst}
+		}
+		if maxInstant.IsZero() || inst.After(maxInstant) {
+			maxInstant = inst
+		}
+	}
+
+	if maxInstant.IsZero() {
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	names := make([]string, 0, len(byLoc))
+	for n := range byLoc {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	locs := make([]StatusLocation, 0, len(names))
+	for _, n := range names {
+		l := byLoc[n]
+		locs = append(locs, StatusLocation{Name: n, Count: l.count, At: l.at.Format("2006-01-02T15:04:05Z07:00")})
+	}
+
+	json.NewEncoder(w).Encode(StatusResponse{
+		Latest:     maxInstant.Format("2006-01-02T15:04:05Z07:00"),
+		AgeSeconds: int64(time.Since(maxInstant).Seconds()),
+		Locations:  locs,
+	})
+}
+
 func generateDataHandler(w http.ResponseWriter, r *http.Request) {
 	// Enable CORS
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -925,6 +1066,7 @@ func main() {
 	http.HandleFunc("/generate-data-range", generateDataRangeHandler)
 	http.HandleFunc("/download-csvs", downloadCSVsHandler)
 	http.HandleFunc("/busyness-data", busynessDataHandler)
+	http.HandleFunc("/status", statusHandler)
 
 	fmt.Printf("Server running at http://localhost:%s/\n", port)
 	fmt.Printf("Dashboard: http://localhost:%s/dashboard.html\n", port)
