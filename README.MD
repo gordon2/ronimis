@@ -67,14 +67,20 @@ so code history stays clean). `backup.sh` commits the runtime CSVs and pushes to
 
 ## Components
 
-- **Data Collection**: `gym-stats-collector.sh` - Automated gym occupancy data collection
-- **Web Server**: `server.go` - Interactive web dashboard with live data refresh
-- **Dashboard**: `dashboard.html` - Occupancy-over-time chart with a month/year switcher (plus manual From/To), an Insights panel (busiest/quietest day & time, typical peak per gym), and adaptive downsampling so wide ranges stay readable and fast. The selected period is encoded in the URL for shareable links: `?month=YYYY-MM`, `?year=YYYY`, `?from=YYYY-MM-DD&to=YYYY-MM-DD`, or `?period=all` (`/dashboard.html`)
-- **Busyness**: `busyness.html` - Typical busyness heatmap by weekday × hour, per location. Averages all readings in the selected period into one "typical week" (`/busyness.html`, data from `GET /busyness-data`, optional `?month=YYYY-MM`; defaults to all data)
+- **Data Collection**: `gym-stats-collector.sh` - Polls the four gym locations every 2 minutes (primary `climbers_in_all` API, with a legacy per-location fallback) into daily CSVs
+- **Web Server**: `server.go` - Serves the pages and the JSON/data endpoints
+- **Dashboard**: `dashboard.html` (`/dashboard.html`) - Occupancy-over-time chart with:
+  - a month/year switcher plus manual From/To, Today, and CSV download
+  - adaptive downsampling so wide ranges stay readable and fast
+  - a **data-freshness badge** (Live / Delayed / Collection stalled, by age) and a **"Right now"** strip comparing each gym's live count to its typical level
+  - an **Insights panel** per gym (busiest/quietest day, busiest hour, best time to go, typical peak)
+  - shareable URLs (`?month=YYYY-MM`, `?year=YYYY`, `?from=YYYY-MM-DD&to=YYYY-MM-DD`, `?period=all`) with browser Back/Forward support
+- **Busyness**: `busyness.html` (`/busyness.html`) - Typical-busyness heatmap by weekday × hour, per location, with an All-data / year / month switcher. Averages readings in the selected period into one "typical week" (data from `GET /busyness-data`)
 - **Linux deploy**: `deploy.sh` - Uploads source and restarts the systemd services on the remote server
 - **macOS always-on**: `deploy-local.sh` - Installs/updates the collector + dashboard as launchd services running from a runtime folder outside `~/Documents`
 - **Backup**: `backup.sh` - Commits the collected CSVs to the repo's `data` branch and pushes (run daily by a launchd agent)
 
+Both pages are **theme-aware** (a 🌙/☀️ toggle, remembered across pages and following the OS by default) and **responsive + installable as a PWA** (`manifest.json` + `icon.svg`/`icon-192.png`/`icon-512.png`).
 
 Generates CSV files in format: `gym-stats-YYYYMMDD.csv`
 
@@ -91,15 +97,26 @@ Expected CSV columns:
 ## Analysis
 
 The **Insights panel** on the dashboard summarises the selected period per gym:
-busiest and quietest weekday, busiest and quietest hour, and the typical peak.
-It is computed from `GET /busyness-data` (weekday × hour averages), which also
-backs the busyness heatmap.
+busiest and quietest weekday, busiest hour, the best time to go (the quietest hour
+that is still within the gym's active window), and the typical peak. The **"Right
+now"** strip compares each gym's live count to its typical count for the current
+weekday+hour. Both are computed from `GET /busyness-data` (weekday × hour
+averages), which also backs the busyness heatmap.
 
 ## Endpoints
 
 - `GET /busyness-data[?month=YYYY-MM | ?from=YYYY-MM-DD&to=YYYY-MM-DD]` - per-gym
   weekday × hour averages, samples, per-location peak, available months, data span.
-- `POST /generate-data-range {from,to}` - builds `gym-data.json` for the time-series
-  chart; wide ranges are averaged into time buckets (adaptive, ~1200 points/series).
+- `GET /status` - most recent reading, its age in seconds, and current per-gym
+  counts (backs the freshness badge and the "Right now" strip; reads only the
+  latest CSV so it is cheap to poll).
+- `POST /generate-data-range {from,to}` - builds the time-series chart data; wide
+  ranges are averaged into time buckets (adaptive, ~1200 points/series) and the
+  result is cached per range + newest-CSV mtime.
 - `POST /generate-data` - same for today's file.
 - `GET /download-csvs` - all `gym-stats-*.csv` as a zip.
+
+## Tests
+
+`go test` covers the fiddly logic: timezone conversion (UTC ↔ Europe/Tallinn),
+adaptive bucket selection, and downsampling.
