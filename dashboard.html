@@ -4,37 +4,73 @@
   <meta charset="utf-8" />
   <title>Gym Occupancy Over Time</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>try { var t = localStorage.gymTheme; if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+    :root {
+      color-scheme: light;
+      --page: #ffffff; --text: #111111; --text-2: #555555; --muted: #999999;
+      --surface: #ffffff; --border: #e4e4e4;
+      --accent: #007bff; --accent-hover: #0056b3; --btn-text: #ffffff;
+      --input-border: #cccccc;
+      --pbtn-text: #333333; --pbtn-hover-border: #888888;
+      --k: #666666; --v: #111111;
+      --cmp-busier: #b45309; --cmp-quieter: #127a3e;
+    }
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --page: #0f0f10; --text: #e8e8e6; --text-2: #a3a3a0; --muted: #7a7a77;
+      --surface: #1a1a1b; --border: #2c2c2c;
+      --accent: #3b82f6; --accent-hover: #2f6fd6; --btn-text: #ffffff;
+      --input-border: #3a3a3a;
+      --pbtn-text: #d8d8d5; --pbtn-hover-border: #666666;
+      --k: #9a9a97; --v: #ededea;
+      --cmp-busier: #f59e0b; --cmp-quieter: #34d399;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --page: #0f0f10; --text: #e8e8e6; --text-2: #a3a3a0; --muted: #7a7a77;
+        --surface: #1a1a1b; --border: #2c2c2c;
+        --accent: #3b82f6; --accent-hover: #2f6fd6; --btn-text: #ffffff;
+        --input-border: #3a3a3a;
+        --pbtn-text: #d8d8d5; --pbtn-hover-border: #666666;
+        --k: #9a9a97; --v: #ededea;
+        --cmp-busier: #f59e0b; --cmp-quieter: #34d399;
+      }
+    }
+
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; background: var(--page); color: var(--text); }
     h1 { margin: 0 0 8px 0; }
     .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; gap: 12px; flex-wrap: wrap; }
-    .sub { color: #555; }
-    .refresh-btn { background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; }
-    .refresh-btn:hover { background: #0056b3; }
+    .sub { color: var(--text-2); }
+    .refresh-btn { background: var(--accent); color: var(--btn-text); border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .refresh-btn:hover { background: var(--accent-hover); }
     .refresh-btn:disabled { background: #6c757d; cursor: not-allowed; }
-    .date-input { padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    .date-input { padding: 6px 8px; border: 1px solid var(--input-border); border-radius: 4px; font-size: 14px; background: var(--surface); color: var(--text); }
     .status { margin-left: 8px; font-size: 14px; color: #28a745; }
+    .theme-toggle { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; width: 36px; height: 32px; cursor: pointer; font-size: 15px; line-height: 1; }
+    .theme-toggle:hover { border-color: var(--pbtn-hover-border); }
     #wrap { width: 100%; }
     canvas { width: 100%; height: 520px; }
 
     .period { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 14px; }
-    .period .lbl { color: #555; margin-right: 4px; }
+    .period .lbl { color: var(--text-2); margin-right: 4px; }
     .month-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; padding-left: 2px; }
     .month-row:empty { display: none; }
-    .pbtn { background: #fff; color: #333; border: 1px solid #ccc; border-radius: 6px; padding: 5px 11px; font-size: 13px; cursor: pointer; font-variant-numeric: tabular-nums; }
-    .pbtn:hover { border-color: #888; }
-    .pbtn.active { background: #007bff; color: #fff; border-color: #007bff; }
+    .pbtn { background: var(--surface); color: var(--pbtn-text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 11px; font-size: 13px; cursor: pointer; font-variant-numeric: tabular-nums; }
+    .pbtn:hover { border-color: var(--pbtn-hover-border); }
+    .pbtn.active { background: var(--accent); color: var(--btn-text); border-color: var(--accent); }
 
     .insights { margin-top: 26px; }
     .insights h2 { font-size: 16px; margin: 0 0 12px; }
     .cards { display: flex; flex-wrap: wrap; gap: 12px; }
-    .card { border: 1px solid #e4e4e4; border-radius: 10px; padding: 14px 16px; min-width: 220px; flex: 1 1 220px; }
+    .card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 220px; flex: 1 1 220px; background: var(--surface); }
     .card h3 { margin: 0 0 10px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
     .card .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
     .card .r { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 3px 0; }
-    .card .r .k { color: #666; }
-    .card .r .v { color: #111; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
-    .card .none { color: #999; font-size: 13px; }
+    .card .r .k { color: var(--k); }
+    .card .r .v { color: var(--v); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+    .card .none { color: var(--muted); font-size: 13px; }
 
     .fresh { display: inline-block; margin-top: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; font-weight: 600; cursor: default; }
     .fresh .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
@@ -47,14 +83,14 @@
 
     .now { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 14px; }
     .now:empty { display: none; }
-    .now .lbl { font-size: 13px; color: #555; }
-    .now-chip { border: 1px solid #e4e4e4; border-radius: 10px; padding: 7px 12px; font-size: 13px; display: flex; align-items: center; gap: 9px; }
+    .now .lbl { font-size: 13px; color: var(--text-2); }
+    .now-chip { border: 1px solid var(--border); border-radius: 10px; padding: 7px 12px; font-size: 13px; display: flex; align-items: center; gap: 9px; background: var(--surface); }
     .now-chip .nm { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
     .now-chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
     .now-chip .cnt { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .now-cmp-busier { color: #b45309; }
-    .now-cmp-quieter { color: #127a3e; }
-    .now-cmp-usual { color: #777; }
+    .now-cmp-busier { color: var(--cmp-busier); }
+    .now-cmp-quieter { color: var(--cmp-quieter); }
+    .now-cmp-usual { color: var(--text-2); }
   </style>
 </head>
 <body>
@@ -62,7 +98,7 @@
     <div class="header">
       <div>
         <h1>Gym Occupancy Over Time</h1>
-        <a href="busyness.html" style="font-size:14px;color:#007bff;text-decoration:none;">Typical busyness →</a>
+        <a href="busyness.html" style="font-size:14px;color:var(--accent);text-decoration:none;">Typical busyness →</a>
         <div><span id="freshness" class="fresh"></span></div>
       </div>
       <div>
@@ -72,6 +108,7 @@
           <label for="toDate">To:</label>
           <input type="date" id="toDate" class="date-input">
           <button id="refreshRangeBtn" class="refresh-btn" onclick="refreshDataRange()">Search</button>
+          <button id="themeToggle" class="theme-toggle" title="Toggle light / dark" onclick="toggleTheme()">🌙</button>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <button id="refreshBtn" class="refresh-btn" onclick="showToday()">Today</button>
@@ -173,6 +210,27 @@
       updateChart();
     }
 
+    // ---- theme (light / dark) ----
+    function isDark() {
+      const t = document.documentElement.getAttribute('data-theme');
+      if (t === 'dark') return true;
+      if (t === 'light') return false;
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    function chartColors() {
+      return isDark()
+        ? { text: '#c9c9c9', grid: 'rgba(255,255,255,0.08)', sep: 'rgba(255,255,255,0.22)' }
+        : { text: '#666666', grid: 'rgba(0,0,0,0.06)', sep: 'rgba(0,0,0,0.35)' };
+    }
+    function updateThemeButton() { const b = document.getElementById('themeToggle'); if (b) b.textContent = isDark() ? '☀️' : '🌙'; }
+    function setTheme(mode) {
+      if (mode === 'auto') { document.documentElement.removeAttribute('data-theme'); try { localStorage.removeItem('gymTheme'); } catch (e) {} }
+      else { document.documentElement.setAttribute('data-theme', mode); try { localStorage.gymTheme = mode; } catch (e) {} }
+      updateThemeButton();
+      if (chart) updateChart();
+    }
+    function toggleTheme() { setTheme(isDark() ? 'light' : 'dark'); }
+
     function getDaySeparators() {
       const uniqueDays = new Set();
       datasets.forEach(dataset => dataset.data.forEach(point => {
@@ -185,7 +243,7 @@
       Array.from(uniqueDays).sort().forEach((dayKey, index) => {
         separators[`day${index}`] = {
           type: 'line', xMin: dayKey + ' 00:00', xMax: dayKey + ' 00:00',
-          borderColor: 'rgba(0,0,0,0.35)', borderWidth: 1, borderDash: [5, 5]
+          borderColor: chartColors().sep, borderWidth: 1, borderDash: [5, 5]
         };
       });
       return separators;
@@ -193,9 +251,16 @@
 
     function updateChart() {
       const unit = pickTimeUnit();
+      const tc = chartColors();
       if (chart) {
         chart.data.datasets = datasets;
         chart.options.scales.x.time.unit = unit;
+        chart.options.scales.x.ticks.color = tc.text;
+        chart.options.scales.y.ticks.color = tc.text;
+        chart.options.scales.x.grid.color = tc.grid;
+        chart.options.scales.y.grid.color = tc.grid;
+        chart.options.scales.y.title.color = tc.text;
+        chart.options.plugins.legend.labels.color = tc.text;
         chart.options.plugins.annotation.annotations = getDaySeparators();
         chart.update();
         return;
@@ -215,13 +280,14 @@
                 tooltipFormat: 'yyyy-MM-dd HH:mm',
                 displayFormats: { hour: 'HH:mm', day: 'MMM dd', week: 'MMM dd', month: 'MMM yyyy' }
               },
-              ticks: { autoSkip: true, maxRotation: 0 }
+              ticks: { autoSkip: true, maxRotation: 0, color: tc.text },
+              grid: { color: tc.grid }
             },
-            y: { beginAtZero: true, title: { display: true, text: 'People' } }
+            y: { beginAtZero: true, title: { display: true, text: 'People', color: tc.text }, ticks: { color: tc.text }, grid: { color: tc.grid } }
           },
           plugins: {
             annotation: { annotations: getDaySeparators() },
-            legend: { position: 'bottom' },
+            legend: { position: 'bottom', labels: { color: tc.text } },
             tooltip: {
               callbacks: {
                 title: (items) => new Date(items[0].raw.x).toLocaleString('en-US', {
@@ -495,6 +561,13 @@
       } catch (e) { /* fall back to all */ }
       period = readURL() || defaultPeriod();
       apply('replace'); // normalize the initial entry; don't add a phantom one
+    }
+    updateThemeButton();
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        let explicit = false; try { explicit = !!localStorage.gymTheme; } catch (e) {}
+        if (!explicit) { updateThemeButton(); if (chart) updateChart(); }
+      });
     }
     init().then(pollStatus);
     setInterval(pollStatus, 60000);
