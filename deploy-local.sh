@@ -17,8 +17,8 @@ echo "Building gym-server..."
 go build -o gym-server server.go
 
 echo "Copying code + config to runtime ($RT)..."
-cp gym-server gym-stats-collector.sh gym-config.env dashboard.html busyness.html manifest.json icon.svg icon-192.png icon-512.png "$RT"/
-chmod +x "$RT/gym-stats-collector.sh"
+cp gym-server gym-stats-collector.sh gym-config.env dashboard.html busyness.html manifest.json icon.svg icon-192.png icon-512.png backup.sh "$RT"/
+chmod +x "$RT/gym-stats-collector.sh" "$RT/backup.sh"
 
 # Seed existing CSVs on first install; never clobber live data on later runs.
 for f in gym-stats-*.csv; do [ -e "$RT/$f" ] || cp "$f" "$RT/" 2>/dev/null || true; done
@@ -57,8 +57,25 @@ cat > "$AGENTS/com.ronimis.gym-server.plist" <<EOF
 </plist>
 EOF
 
+cat > "$AGENTS/com.ronimis.gym-backup.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.ronimis.gym-backup</string>
+    <key>ProgramArguments</key><array><string>$RT/backup.sh</string></array>
+    <key>WorkingDirectory</key><string>$RT</string>
+    <key>EnvironmentVariables</key><dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+    <key>RunAtLoad</key><true/>
+    <key>StartCalendarInterval</key><dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>30</integer></dict>
+    <key>StandardOutPath</key><string>$LOGS/ronimis-gym-backup.log</string>
+    <key>StandardErrorPath</key><string>$LOGS/ronimis-gym-backup.log</string>
+</dict>
+</plist>
+EOF
+
 echo "(Re)loading services..."
-for L in com.ronimis.gym-stats-collector com.ronimis.gym-server; do
+for L in com.ronimis.gym-stats-collector com.ronimis.gym-server com.ronimis.gym-backup; do
   launchctl bootout "gui/$(id -u)/$L" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$AGENTS/$L.plist"
 done

@@ -44,7 +44,8 @@ Install — or update after editing the repo:
 ./deploy-local.sh
 ```
 It builds the server, copies code + config into the runtime folder (data CSVs
-there are left untouched), writes the two LaunchAgents, and (re)loads them.
+there are left untouched), writes the LaunchAgents (collector, dashboard server,
+daily backup), and (re)loads them.
 Dashboard: http://localhost:8002/dashboard.html
 
 Manage:
@@ -52,10 +53,17 @@ Manage:
 # stop (KeepAlive respawns a plain kill — use bootout)
 launchctl bootout gui/$(id -u)/com.ronimis.gym-stats-collector
 launchctl bootout gui/$(id -u)/com.ronimis.gym-server
+launchctl bootout gui/$(id -u)/com.ronimis.gym-backup
 # start / reload
 ./deploy-local.sh
 ```
-Logs: `~/Library/Logs/ronimis-gym-collector.log` and `ronimis-gym-server.log`
+Logs: `~/Library/Logs/ronimis-gym-collector.log`, `ronimis-gym-server.log`, `ronimis-gym-backup.log`
+
+### Backups
+CSV history is backed up to the repo's **`data` branch** (kept separate from `main`
+so code history stays clean). `backup.sh` commits the runtime CSVs and pushes to
+`origin/data`; the `com.ronimis.gym-backup` LaunchAgent (installed by
+`deploy-local.sh`) runs it at load and daily at 03:30. Restore with `git checkout data`.
 
 ## Components
 
@@ -65,6 +73,7 @@ Logs: `~/Library/Logs/ronimis-gym-collector.log` and `ronimis-gym-server.log`
 - **Busyness**: `busyness.html` - Typical busyness heatmap by weekday × hour, per location. Averages all readings in the selected period into one "typical week" (`/busyness.html`, data from `GET /busyness-data`, optional `?month=YYYY-MM`; defaults to all data)
 - **Linux deploy**: `deploy.sh` - Uploads source and restarts the systemd services on the remote server
 - **macOS always-on**: `deploy-local.sh` - Installs/updates the collector + dashboard as launchd services running from a runtime folder outside `~/Documents`
+- **Backup**: `backup.sh` - Commits the collected CSVs to the repo's `data` branch and pushes (run daily by a launchd agent)
 
 
 Generates CSV files in format: `gym-stats-YYYYMMDD.csv`
