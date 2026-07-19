@@ -44,6 +44,17 @@
     .fresh-delayed .dot { background: #e0a106; }
     .fresh-stale { background: #fdeaea; color: #a41c1c; }
     .fresh-stale .dot { background: #dc2626; }
+
+    .now { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 14px; }
+    .now:empty { display: none; }
+    .now .lbl { font-size: 13px; color: #555; }
+    .now-chip { border: 1px solid #e4e4e4; border-radius: 10px; padding: 7px 12px; font-size: 13px; display: flex; align-items: center; gap: 9px; }
+    .now-chip .nm { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+    .now-chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .now-chip .cnt { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .now-cmp-busier { color: #b45309; }
+    .now-cmp-quieter { color: #127a3e; }
+    .now-cmp-usual { color: #777; }
   </style>
 </head>
 <body>
@@ -69,6 +80,8 @@
         </div>
       </div>
     </div>
+
+    <div class="now" id="nowRow"></div>
 
     <div class="period" id="yearRow"></div>
     <div class="month-row" id="monthRow"></div>
@@ -101,6 +114,7 @@
     let meta = { months: [], dataStart: '', dataEnd: '' };
     let period = { mode: 'all' }; // all | year | month | today | custom
     let applySeq = 0; // guards against overlapping apply() calls racing each other
+    let typical = null; // { days:[...], byName: { gym: avg[7][24] } } — for "right now vs usual"
 
     // ---- chart ----
     // Typical spacing between consecutive points (= the bucket size). Used to set a
@@ -410,12 +424,41 @@
       if (s < 86400) { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h + 'h' + (m ? ' ' + m + 'm' : ''); }
       const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600); return d + 'd' + (h ? ' ' + h + 'h' : '');
     }
+    // "Right now" strip: live count vs the typical count for the current Tallinn
+    // weekday+hour (independent of the selected chart period).
+    function renderNow(status) {
+      const row = document.getElementById('nowRow');
+      if (!typical || !status.locations || !status.locations.length || !status.latest) { row.innerHTML = ''; return; }
+      const dp = status.latest.slice(0, 10).split('-').map(Number);
+      const hour = parseInt(status.latest.slice(11, 13), 10);
+      const dayIdx = (new Date(dp[0], dp[1] - 1, dp[2]).getDay() + 6) % 7; // Mon=0
+      const chips = status.locations.map((l, i) => {
+        const grid = typical.byName[l.name];
+        let cmp = '';
+        if (grid && grid[dayIdx] && grid[dayIdx][hour] >= 0) {
+          const typ = grid[dayIdx][hour];
+          if (typ >= 1) {
+            let cls, arrow, word;
+            if (l.count > typ * 1.25) { cls = 'now-cmp-busier'; arrow = '↑'; word = 'busier than usual'; }
+            else if (l.count < typ * 0.75) { cls = 'now-cmp-quieter'; arrow = '↓'; word = 'quieter than usual'; }
+            else { cls = 'now-cmp-usual'; arrow = '≈'; word = 'about usual'; }
+            cmp = '<span class="' + cls + '">' + arrow + ' ' + word + ' (typ. ~' + Math.round(typ) + ')</span>';
+          } else {
+            cmp = '<span class="now-cmp-usual">usually empty now</span>';
+          }
+        }
+        return '<div class="now-chip"><span class="nm"><span class="dot" style="background:' + colorFor(l.name, i) + '"></span>' + l.name + '</span><span class="cnt">' + l.count + '</span>' + cmp + '</div>';
+      }).join('');
+      row.innerHTML = '<span class="lbl">Right now:</span>' + chips;
+    }
+
     async function pollStatus() {
       const el = document.getElementById('freshness');
       try {
         const s = await (await fetch('status', { cache: 'no-store' })).json();
         if (!s.latest || s.ageSeconds == null || s.ageSeconds < 0) {
-          el.className = 'fresh fresh-stale'; el.innerHTML = '<span class="dot"></span>No data collected'; el.title = ''; return;
+          el.className = 'fresh fresh-stale'; el.innerHTML = '<span class="dot"></span>No data collected'; el.title = '';
+          document.getElementById('nowRow').innerHTML = ''; return;
         }
         const age = s.ageSeconds;
         let cls, label;
@@ -425,8 +468,10 @@
         el.className = 'fresh ' + cls;
         el.innerHTML = '<span class="dot"></span>' + label;
         el.title = (s.locations || []).map(l => l.name + ': ' + l.count).join('   ·   ');
+        if (age < 1800) renderNow(s); else document.getElementById('nowRow').innerHTML = '';
       } catch (e) {
         el.className = 'fresh fresh-stale'; el.innerHTML = '<span class="dot"></span>status unavailable';
+        document.getElementById('nowRow').innerHTML = '';
       }
     }
 
@@ -435,12 +480,13 @@
         const res = await fetch('busyness-data');
         const d = await res.json();
         meta = { months: d.months || [], dataStart: d.dataStart || '', dataEnd: d.dataEnd || '' };
+        typical = { days: d.days || [], byName: {} };
+        (d.locations || []).forEach(l => { typical.byName[l.name] = l.avg; });
       } catch (e) { /* fall back to all */ }
       period = readURL() || defaultPeriod();
       apply('replace'); // normalize the initial entry; don't add a phantom one
     }
-    init();
-    pollStatus();
+    init().then(pollStatus);
     setInterval(pollStatus, 60000);
   </script>
 </body>
