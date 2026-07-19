@@ -5,6 +5,14 @@
   <title>Typical Gym Busyness</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>try { var t = localStorage.gymTheme; if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0f0f10" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Gym" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
   <style>
     :root {
       color-scheme: light;
@@ -113,6 +121,9 @@
     #tip .big { font-weight: 600; font-size: 13px; }
     .note { color: var(--muted); font-size: 12px; margin-top: 18px; }
     .theme-toggle { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; width: 36px; height: 32px; cursor: pointer; font-size: 15px; line-height: 1; flex: none; }
+    @media (max-width: 640px) {
+      .wrap { padding: 16px 12px 40px; }
+    }
   </style>
 </head>
 <body>

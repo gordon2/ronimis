@@ -17,7 +17,7 @@ echo "Building gym-server..."
 go build -o gym-server server.go
 
 echo "Copying code + config to runtime ($RT)..."
-cp gym-server gym-stats-collector.sh gym-config.env dashboard.html busyness.html "$RT"/
+cp gym-server gym-stats-collector.sh gym-config.env dashboard.html busyness.html manifest.json icon.svg icon-192.png icon-512.png "$RT"/
 chmod +x "$RT/gym-stats-collector.sh"
 
 # Seed existing CSVs on first install; never clobber live data on later runs.

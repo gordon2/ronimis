@@ -5,6 +5,14 @@
   <title>Gym Occupancy Over Time</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>try { var t = localStorage.gymTheme; if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}</script>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0f0f10" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Gym" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
   <style>
     :root {
       color-scheme: light;
@@ -91,6 +99,12 @@
     .now-cmp-busier { color: var(--cmp-busier); }
     .now-cmp-quieter { color: var(--cmp-quieter); }
     .now-cmp-usual { color: var(--text-2); }
+    @media (max-width: 640px) {
+      body { margin: 12px; }
+      h1 { font-size: 22px; }
+      canvas { height: 360px; }
+      .header { gap: 8px; }
+    }
   </style>
 </head>
 <body>
@@ -102,7 +116,7 @@
         <div><span id="freshness" class="fresh"></span></div>
       </div>
       <div>
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px;">
           <label for="fromDate">From:</label>
           <input type="date" id="fromDate" class="date-input">
           <label for="toDate">To:</label>
@@ -110,7 +124,7 @@
           <button id="refreshRangeBtn" class="refresh-btn" onclick="refreshDataRange()">Search</button>
           <button id="themeToggle" class="theme-toggle" title="Toggle light / dark" onclick="toggleTheme()">🌙</button>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
           <button id="refreshBtn" class="refresh-btn" onclick="showToday()">Today</button>
           <button id="downloadBtn" class="refresh-btn" onclick="downloadAllCSVs()">Download CSVs</button>
           <span id="status" class="status"></span>
