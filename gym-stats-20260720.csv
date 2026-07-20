@@ -2339,3 +2339,7 @@ timestamp,timezone,location_id,location_name,user_count,status,response
 2026-07-20 19:35:28,EEST,3,T1,40,success,"{"total":40,"location_name":"T1 Shopping Mall","location_id":3}"
 2026-07-20 19:35:28,EEST,9,Mustika,19,success,"{"total":19,"location_name":"Mustika","location_id":9}"
 2026-07-20 19:35:28,EEST,10,Suur-Paala,22,success,"{"total":22,"location_name":"Suur-Paala","location_id":10}"
+2026-07-20 19:36:45,EEST,1,Hipodroom,8,success,"{"total":8,"location_name":"Hipodroom","location_id":1}"
+2026-07-20 19:36:45,EEST,3,T1,41,success,"{"total":41,"location_name":"T1 Shopping Mall","location_id":3}"
+2026-07-20 19:36:45,EEST,9,Mustika,17,success,"{"total":17,"location_name":"Mustika","location_id":9}"
+2026-07-20 19:36:45,EEST,10,Suur-Paala,22,success,"{"total":22,"location_name":"Suur-Paala","location_id":10}"
