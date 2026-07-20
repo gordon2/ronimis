@@ -60,6 +60,11 @@
     .theme-toggle:hover { border-color: var(--pbtn-hover-border); }
     #wrap { width: 100%; }
     canvas { width: 100%; height: 520px; }
+    .chart-wrap { position: relative; }
+    .loader { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; background: color-mix(in srgb, var(--page) 65%, transparent); color: var(--text-2); font-size: 14px; border-radius: 8px; }
+    .loader[hidden] { display: none; }
+    .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     .period { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 14px; }
     .period .lbl { color: var(--text-2); margin-right: 4px; }
@@ -137,7 +142,10 @@
     <div class="period" id="yearRow"></div>
     <div class="month-row" id="monthRow"></div>
 
-    <canvas id="chart"></canvas>
+    <div class="chart-wrap">
+      <canvas id="chart"></canvas>
+      <div id="chartLoader" class="loader" hidden><span class="spinner"></span>Loading…</div>
+    </div>
 
     <div class="insights">
       <h2 id="insightsTitle">Insights</h2>
@@ -419,6 +427,9 @@
     }
 
     // ---- apply / actions ----
+    function showLoader() { const l = document.getElementById('chartLoader'); if (l) l.hidden = false; }
+    function hideLoader() { const l = document.getElementById('chartLoader'); if (l) l.hidden = true; }
+
     async function apply(urlMode) {
       const seq = ++applySeq;
       const status = document.getElementById('status');
@@ -426,7 +437,7 @@
       writeURL(urlMode || 'push');
       const range = periodRange();
       if (!range.from || !range.to) { status.textContent = '✗ Pick both dates'; setTimeout(() => status.textContent = '', 3000); return; }
-      status.textContent = 'Loading…';
+      showLoader();
       try {
         const gen = await fetch('/generate-data-range', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(range) });
         if (seq !== applySeq) return; // a newer selection superseded this one
@@ -434,14 +445,14 @@
         if (seq !== applySeq) return;
         if (!gen.ok || !r.success) throw new Error(r.error || 'failed');
         renderDatasets(r.datasets);
+        hideLoader();
         await renderInsights(range, seq);
-        if (seq === applySeq) status.textContent = '';
       } catch (e) {
         if (seq !== applySeq) return;
         // No data in range is a normal outcome (e.g. a month with a gap)
         renderDatasets([]);
+        hideLoader();
         await renderInsights(range, seq);
-        if (seq === applySeq) status.textContent = '';
       }
     }
 
