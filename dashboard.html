@@ -86,6 +86,12 @@
     .spacer { flex: 1 1 auto; }
     .btn-ghost { background: var(--surface); color: var(--text-2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
     .btn-ghost:hover { border-color: var(--pbtn-hover-border); }
+    .ctrl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .ctrl-day { border-top: 1px solid var(--border); padding-top: 10px; }
+    .day-arrow { font-size: 11px; padding: 6px 9px; }
+    .day-arrow:disabled { opacity: .4; cursor: not-allowed; }
+    .day-label { font-size: 14px; font-weight: 600; color: var(--text-2); min-width: 156px; text-align: center; }
+    .day-label.active { color: var(--text); }
 
     .insights { margin-top: 26px; }
     .insights h2 { font-size: 16px; margin: 0 0 12px; }
@@ -143,13 +149,19 @@
     <div class="controls">
       <div class="period" id="yearRow"></div>
       <div class="month-row" id="monthRow"></div>
+      <div class="ctrl-row ctrl-day">
+        <span class="lbl">Day</span>
+        <button class="pbtn day-arrow" onclick="stepDay(-1)" title="Previous day" aria-label="Previous day">◀</button>
+        <span class="day-label" id="dayLabel"></span>
+        <button id="dayNext" class="pbtn day-arrow" onclick="stepDay(1)" title="Next day" aria-label="Next day">▶</button>
+        <button class="btn-ghost" onclick="showToday()">Today</button>
+      </div>
       <div class="ctrl-custom">
         <span class="lbl">Custom</span>
         <input type="date" id="fromDate" class="date-input">
         <span class="dash">–</span>
         <input type="date" id="toDate" class="date-input">
         <button id="refreshRangeBtn" class="refresh-btn" onclick="refreshDataRange()">Go</button>
-        <button id="refreshBtn" class="btn-ghost" onclick="showToday()">Today</button>
         <span class="spacer"></span>
         <button id="downloadBtn" class="btn-ghost" onclick="downloadAllCSVs()">Download CSVs</button>
         <span id="status" class="status"></span>
@@ -344,19 +356,22 @@
     function pad(n) { return String(n).padStart(2, '0'); }
     function monthShort(ym) { return new Date(2000, Number(ym.split('-')[1]) - 1, 1).toLocaleString('en-US', { month: 'short' }); }
     function monthLong(ym) { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }); }
+    function todayStr() { const t = new Date(); return t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()); }
+    function addDays(dayStr, delta) { const [y, m, d] = dayStr.split('-').map(Number); const dt = new Date(y, m - 1, d + delta); return dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate()); }
+    function dayLabelText(dayStr) { const [y, m, d] = dayStr.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }); }
 
     function periodRange() {
       if (period.mode === 'all') return { from: meta.dataStart, to: meta.dataEnd };
       if (period.mode === 'year') return { from: period.year + '-01-01', to: period.year + '-12-31' };
       if (period.mode === 'month') { const [y, m] = period.month.split('-').map(Number); return { from: period.month + '-01', to: period.month + '-' + pad(lastDay(y, m)) }; }
-      if (period.mode === 'today') { const t = new Date(); const d = t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()); return { from: d, to: d }; }
+      if (period.mode === 'day') return { from: period.day, to: period.day };
       return { from: document.getElementById('fromDate').value, to: document.getElementById('toDate').value };
     }
     function periodLabel() {
       if (period.mode === 'all') return 'all data';
       if (period.mode === 'year') return period.year;
       if (period.mode === 'month') return monthLong(period.month);
-      if (period.mode === 'today') return 'today';
+      if (period.mode === 'day') return dayLabelText(period.day);
       const r = periodRange(); return r.from + ' → ' + r.to;
     }
 
@@ -448,6 +463,7 @@
       const seq = ++applySeq;
       const status = document.getElementById('status');
       renderPeriod();
+      updateDayNav();
       writeURL(urlMode || 'push');
       const range = periodRange();
       if (!range.from || !range.to) { status.textContent = '✗ Pick both dates'; setTimeout(() => status.textContent = '', 3000); return; }
@@ -471,7 +487,17 @@
     }
 
     function refreshDataRange() { period = { mode: 'custom' }; apply(); }
-    function showToday() { period = { mode: 'today' }; apply(); }
+    function showToday() { period = { mode: 'day', day: todayStr() }; apply(); }
+    function stepDay(delta) { const base = period.mode === 'day' ? period.day : todayStr(); period = { mode: 'day', day: addDays(base, delta) }; apply(); }
+    function updateDayNav() {
+      const label = document.getElementById('dayLabel');
+      if (!label) return;
+      const day = period.mode === 'day' ? period.day : todayStr();
+      label.textContent = dayLabelText(day);
+      label.classList.toggle('active', period.mode === 'day');
+      const next = document.getElementById('dayNext');
+      if (next) next.disabled = day >= todayStr();
+    }
 
     function downloadAllCSVs() {
       const link = document.createElement('a');
@@ -483,7 +509,7 @@
     function buildQuery() {
       const p = new URLSearchParams();
       if (period.mode === 'all') p.set('period', 'all');
-      else if (period.mode === 'today') p.set('period', 'today');
+      else if (period.mode === 'day') p.set('day', period.day);
       else if (period.mode === 'year') p.set('year', period.year);
       else if (period.mode === 'month') p.set('month', period.month);
       else if (period.mode === 'custom') { const r = periodRange(); if (r.from) p.set('from', r.from); if (r.to) p.set('to', r.to); }
@@ -508,11 +534,13 @@
       if (month && /^\d{4}-\d{2}$/.test(month)) return { mode: 'month', year: month.slice(0, 4), month };
       const year = p.get('year');
       if (year && /^\d{4}$/.test(year)) return { mode: 'year', year };
+      const day = p.get('day');
+      if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) return { mode: 'day', day };
       const from = p.get('from'), to = p.get('to');
       if (from && to) { document.getElementById('fromDate').value = from; document.getElementById('toDate').value = to; return { mode: 'custom' }; }
       const per = p.get('period');
       if (per === 'all') return { mode: 'all' };
-      if (per === 'today') return { mode: 'today' };
+      if (per === 'today') return { mode: 'day', day: todayStr() };
       return null;
     }
 
