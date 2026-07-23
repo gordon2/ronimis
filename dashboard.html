@@ -200,6 +200,7 @@
     let period = { mode: 'all' }; // all | year | month | today | custom
     let applySeq = 0; // guards against overlapping apply() calls racing each other
     let typical = null; // { days:[...], byName: { gym: avg[7][24] } } — for "right now vs usual"
+    let curDay = todayStr(); // day-stepper cursor; persists across mode switches so stepping resumes
 
     // ---- chart ----
     // Typical spacing between consecutive points (= the bucket size). Used to set a
@@ -487,16 +488,22 @@
     }
 
     function refreshDataRange() { period = { mode: 'custom' }; apply(); }
-    function showToday() { period = { mode: 'day', day: todayStr() }; apply(); }
-    function stepDay(delta) { const base = period.mode === 'day' ? period.day : todayStr(); period = { mode: 'day', day: addDays(base, delta) }; apply(); }
+    function showToday() { curDay = todayStr(); period = { mode: 'day', day: curDay }; apply(); }
+    function stepDay(delta) { curDay = addDays(curDay, delta); period = { mode: 'day', day: curDay }; apply(); }
     function updateDayNav() {
       const label = document.getElementById('dayLabel');
       if (!label) return;
-      const day = period.mode === 'day' ? period.day : todayStr();
-      label.textContent = dayLabelText(day);
-      label.classList.toggle('active', period.mode === 'day');
+      // Keep the day cursor in sync: it follows an explicit day, adopts a custom
+      // single-day range, and otherwise persists so stepping resumes where it left off.
+      if (period.mode === 'day') curDay = period.day;
+      else if (period.mode === 'custom') {
+        const f = document.getElementById('fromDate').value, t = document.getElementById('toDate').value;
+        if (f && t && f === t) curDay = f;
+      }
+      label.textContent = dayLabelText(curDay);
+      label.classList.toggle('active', period.mode === 'day' && period.day === curDay);
       const next = document.getElementById('dayNext');
-      if (next) next.disabled = day >= todayStr();
+      if (next) next.disabled = curDay >= todayStr();
     }
 
     function downloadAllCSVs() {

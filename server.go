@@ -888,10 +888,12 @@ func generateDataRangeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(csvFiles) == 0 {
-		w.WriteHeader(http.StatusNotFound)
+		// An empty range is a normal outcome (e.g. stepping to a day before
+		// collection started), not an error — return an empty result.
 		json.NewEncoder(w).Encode(GenerateResponse{
-			Success: false,
-			Error:   fmt.Sprintf("No CSV files found for date range %s to %s", dateRange.From, dateRange.To),
+			Success:  true,
+			Message:  fmt.Sprintf("No data for %s to %s", dateRange.From, dateRange.To),
+			Datasets: []Dataset{},
 		})
 		return
 	}
