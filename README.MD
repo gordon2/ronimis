@@ -76,11 +76,11 @@ so code history stays clean). `backup.sh` commits the runtime CSVs and pushes to
 - **Data Collection**: `gym-stats-collector.sh` - Polls the four gym locations every 2 minutes (primary `climbers_in_all` API, with a legacy per-location fallback) into daily CSVs
 - **Web Server**: `server.go` - Serves the pages and the JSON/data endpoints
 - **Dashboard**: `dashboard.html` (`/dashboard.html`) - Occupancy-over-time chart with:
-  - a month/year switcher plus manual From/To, Today, and CSV download
+  - a month/year switcher, a day stepper (◀ / ▶ with the date shown, plus Today), manual From/To, and CSV download
   - adaptive downsampling so wide ranges stay readable and fast
   - a **data-freshness badge** (Live / Delayed / Collection stalled, by age) and a **"Right now"** strip comparing each gym's live count to its typical level
   - an **Insights panel** per gym (busiest/quietest day, busiest hour, best time to go, typical peak)
-  - shareable URLs (`?month=YYYY-MM`, `?year=YYYY`, `?from=YYYY-MM-DD&to=YYYY-MM-DD`, `?period=all`) with browser Back/Forward support
+  - shareable URLs (`?month=YYYY-MM`, `?year=YYYY`, `?day=YYYY-MM-DD`, `?from=YYYY-MM-DD&to=YYYY-MM-DD`, `?period=all`) with browser Back/Forward support
 - **Busyness**: `busyness.html` (`/busyness.html`) - Typical-busyness heatmap by weekday × hour, per location, with an All-data / year / month switcher. Averages readings in the selected period into one "typical week" (data from `GET /busyness-data`)
 - **Linux deploy**: `deploy.sh` - Uploads source and restarts the systemd services on the remote server
 - **macOS always-on**: `deploy-local.sh` - Installs/updates the collector + dashboard as launchd services running from a runtime folder outside `~/Documents`
