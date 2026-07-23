@@ -90,7 +90,8 @@
     .ctrl-day { border-top: 1px solid var(--border); padding-top: 10px; }
     .day-arrow { font-size: 11px; padding: 6px 9px; }
     .day-arrow:disabled { opacity: .4; cursor: not-allowed; }
-    .day-label { font-size: 14px; font-weight: 600; color: var(--text-2); min-width: 156px; text-align: center; }
+    .day-label { font-size: 14px; font-weight: 600; color: var(--text-2); min-width: 156px; text-align: center; cursor: pointer; }
+    .day-label:hover { color: var(--text); text-decoration: underline; }
     .day-label.active { color: var(--text); }
 
     .insights { margin-top: 26px; }
@@ -152,7 +153,7 @@
       <div class="ctrl-row ctrl-day">
         <span class="lbl">Day</span>
         <button class="pbtn day-arrow" onclick="stepDay(-1)" title="Previous day" aria-label="Previous day">◀</button>
-        <span class="day-label" id="dayLabel"></span>
+        <span class="day-label" id="dayLabel" onclick="goDay()" title="View this day"></span>
         <button id="dayNext" class="pbtn day-arrow" onclick="stepDay(1)" title="Next day" aria-label="Next day">▶</button>
         <button class="btn-ghost" onclick="showToday()">Today</button>
       </div>
@@ -490,6 +491,7 @@
     function refreshDataRange() { period = { mode: 'custom' }; apply(); }
     function showToday() { curDay = todayStr(); period = { mode: 'day', day: curDay }; apply(); }
     function stepDay(delta) { curDay = addDays(curDay, delta); period = { mode: 'day', day: curDay }; apply(); }
+    function goDay() { period = { mode: 'day', day: curDay }; apply(); } // click the date label to view that day
     function updateDayNav() {
       const label = document.getElementById('dayLabel');
       if (!label) return;
