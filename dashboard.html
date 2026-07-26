@@ -59,8 +59,13 @@
     .theme-toggle { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; width: 36px; height: 32px; cursor: pointer; font-size: 15px; line-height: 1; }
     .theme-toggle:hover { border-color: var(--pbtn-hover-border); }
     #wrap { width: 100%; }
-    canvas { width: 100%; height: 520px; }
-    .chart-wrap { position: relative; }
+    canvas { width: 100%; height: 100%; display: block; }
+    .chart-wrap { position: relative; height: clamp(300px, 56vh, 560px); }
+    .gym-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+    .gym-chip { display: inline-flex; align-items: center; gap: 7px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    .gym-chip:hover { border-color: var(--pbtn-hover-border); }
+    .gym-chip.off { opacity: .45; }
+    .gym-chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
     .loader { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; background: color-mix(in srgb, var(--page) 65%, transparent); color: var(--text-2); font-size: 14px; border-radius: 8px; }
     .loader[hidden] { display: none; }
     .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
@@ -79,9 +84,11 @@
     .pagelink { font-size: 14px; color: var(--accent); text-decoration: none; }
     .pagelink:hover { text-decoration: underline; }
     .lbl { color: var(--text-2); font-size: 13px; min-width: 54px; }
-    .controls { border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .controls { border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
     .controls .period, .controls .month-row { margin: 0; }
     .ctrl-custom { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; }
+    .sep-v { width: 1px; align-self: stretch; min-height: 22px; background: var(--border); margin: 0 4px; }
+    .lbl-inline { min-width: auto; }
     .dash { color: var(--muted); }
     .spacer { flex: 1 1 auto; }
     .btn-ghost { background: var(--surface); color: var(--text-2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
@@ -114,7 +121,7 @@
     .fresh-stale { background: #fdeaea; color: #a41c1c; }
     .fresh-stale .dot { background: #dc2626; }
 
-    .now { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 14px; }
+    .now { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 10px; }
     .now:empty { display: none; }
     .now .lbl { font-size: 13px; color: var(--text-2); }
     .now-chip { border: 1px solid var(--border); border-radius: 10px; padding: 7px 12px; font-size: 13px; display: flex; align-items: center; gap: 9px; background: var(--surface); }
@@ -156,9 +163,8 @@
         <span class="day-label" id="dayLabel" onclick="goDay()" title="View this day"></span>
         <button id="dayNext" class="pbtn day-arrow" onclick="stepDay(1)" title="Next day" aria-label="Next day">▶</button>
         <button class="btn-ghost" onclick="showToday()">Today</button>
-      </div>
-      <div class="ctrl-custom">
-        <span class="lbl">Custom</span>
+        <span class="sep-v"></span>
+        <span class="lbl lbl-inline">Custom</span>
         <input type="date" id="fromDate" class="date-input">
         <span class="dash">–</span>
         <input type="date" id="toDate" class="date-input">
@@ -168,6 +174,8 @@
         <span id="status" class="status"></span>
       </div>
     </div>
+
+    <div class="gym-filter" id="gymFilter"></div>
 
     <div class="chart-wrap">
       <canvas id="chart"></canvas>
@@ -202,6 +210,8 @@
     let applySeq = 0; // guards against overlapping apply() calls racing each other
     let typical = null; // { days:[...], byName: { gym: avg[7][24] } } — for "right now vs usual"
     let curDay = todayStr(); // day-stepper cursor; persists across mode switches so stepping resumes
+    let hiddenGyms = new Set();
+    try { hiddenGyms = new Set(JSON.parse(localStorage.hiddenGyms || '[]')); } catch (e) {}
 
     // ---- chart ----
     // Typical spacing between consecutive points (= the bucket size). Used to set a
@@ -255,9 +265,32 @@
         borderWidth: 2,
         borderColor: colorFor(ds.label, i),
         backgroundColor: colorFor(ds.label, i),
-        pointBackgroundColor: colorFor(ds.label, i)
+        pointBackgroundColor: colorFor(ds.label, i),
+        hidden: hiddenGyms.has(ds.label)
       }));
       updateChart();
+      renderGymFilter();
+    }
+
+    // Gym show/hide chips above the chart (replace the chart's own legend).
+    function renderGymFilter() {
+      const row = document.getElementById('gymFilter');
+      if (!row) return;
+      row.innerHTML = '';
+      datasets.forEach((ds, i) => {
+        const chip = document.createElement('button');
+        chip.className = 'gym-chip' + (hiddenGyms.has(ds.label) ? ' off' : '');
+        chip.innerHTML = '<span class="dot" style="background:' + colorFor(ds.label, i) + '"></span>' + ds.label;
+        chip.onclick = () => toggleGym(ds.label);
+        row.appendChild(chip);
+      });
+    }
+    function toggleGym(name) {
+      if (hiddenGyms.has(name)) hiddenGyms.delete(name); else hiddenGyms.add(name);
+      try { localStorage.hiddenGyms = JSON.stringify([...hiddenGyms]); } catch (e) {}
+      datasets.forEach(ds => { ds.hidden = hiddenGyms.has(ds.label); });
+      if (chart) chart.update('none');
+      renderGymFilter();
     }
 
     // ---- theme (light / dark) ----
@@ -310,7 +343,6 @@
         chart.options.scales.x.grid.color = tc.grid;
         chart.options.scales.y.grid.color = tc.grid;
         chart.options.scales.y.title.color = tc.text;
-        chart.options.plugins.legend.labels.color = tc.text;
         chart.options.plugins.annotation.annotations = getDaySeparators();
         chart.update();
         return;
@@ -320,6 +352,7 @@
         data: { datasets },
         options: {
           normalized: true,
+          maintainAspectRatio: false,
           interaction: { mode: 'nearest', intersect: false },
           animation: false,
           scales: {
@@ -337,7 +370,7 @@
           },
           plugins: {
             annotation: { annotations: getDaySeparators() },
-            legend: { position: 'bottom', labels: { color: tc.text } },
+            legend: { display: false },
             tooltip: {
               callbacks: {
                 title: (items) => new Date(items[0].raw.x).toLocaleString('en-US', {
