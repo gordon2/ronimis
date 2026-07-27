@@ -61,11 +61,6 @@
     #wrap { width: 100%; }
     canvas { width: 100%; height: 100%; display: block; }
     .chart-wrap { position: relative; height: clamp(300px, 56vh, 560px); }
-    .gym-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
-    .gym-chip { display: inline-flex; align-items: center; gap: 7px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
-    .gym-chip:hover { border-color: var(--pbtn-hover-border); }
-    .gym-chip.off { opacity: .45; }
-    .gym-chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
     .loader { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; background: color-mix(in srgb, var(--page) 65%, transparent); color: var(--text-2); font-size: 14px; border-radius: 8px; }
     .loader[hidden] { display: none; }
     .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
@@ -124,7 +119,12 @@
     .now { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 10px; }
     .now:empty { display: none; }
     .now .lbl { font-size: 13px; color: var(--text-2); }
-    .now-chip { border: 1px solid var(--border); border-radius: 10px; padding: 7px 12px; font-size: 13px; display: flex; align-items: center; gap: 9px; background: var(--surface); }
+    .now-chip { border: 1px solid var(--border); border-radius: 10px; padding: 7px 12px; font-size: 13px; display: flex; align-items: center; gap: 9px; background: var(--surface); cursor: pointer; user-select: none; }
+    .now-chip:hover { border-color: var(--pbtn-hover-border); }
+    .now-chip.static { cursor: default; }
+    .now-chip.static:hover { border-color: var(--border); }
+    .now-chip.off { border-style: dashed; }
+    .now-chip.off .nm { opacity: .45; }
     .now-chip .nm { font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
     .now-chip .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
     .now-chip .cnt { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -175,8 +175,6 @@
       </div>
     </div>
 
-    <div class="gym-filter" id="gymFilter"></div>
-
     <div class="chart-wrap">
       <canvas id="chart"></canvas>
       <div id="chartLoader" class="loader" hidden><span class="spinner"></span>Loading…</div>
@@ -210,6 +208,7 @@
     let applySeq = 0; // guards against overlapping apply() calls racing each other
     let typical = null; // { days:[...], byName: { gym: avg[7][24] } } — for "right now vs usual"
     let curDay = todayStr(); // day-stepper cursor; persists across mode switches so stepping resumes
+    let lastStatus = null; // latest /status payload, so the gyms row can re-render on chart changes
     let hiddenGyms = new Set();
     try { hiddenGyms = new Set(JSON.parse(localStorage.hiddenGyms || '[]')); } catch (e) {}
 
@@ -269,28 +268,15 @@
         hidden: hiddenGyms.has(ds.label)
       }));
       updateChart();
-      renderGymFilter();
+      renderGymsRow();
     }
 
-    // Gym show/hide chips above the chart (replace the chart's own legend).
-    function renderGymFilter() {
-      const row = document.getElementById('gymFilter');
-      if (!row) return;
-      row.innerHTML = '';
-      datasets.forEach((ds, i) => {
-        const chip = document.createElement('button');
-        chip.className = 'gym-chip' + (hiddenGyms.has(ds.label) ? ' off' : '');
-        chip.innerHTML = '<span class="dot" style="background:' + colorFor(ds.label, i) + '"></span>' + ds.label;
-        chip.onclick = () => toggleGym(ds.label);
-        row.appendChild(chip);
-      });
-    }
     function toggleGym(name) {
       if (hiddenGyms.has(name)) hiddenGyms.delete(name); else hiddenGyms.add(name);
       try { localStorage.hiddenGyms = JSON.stringify([...hiddenGyms]); } catch (e) {}
       datasets.forEach(ds => { ds.hidden = hiddenGyms.has(ds.label); });
       if (chart) chart.update('none');
-      renderGymFilter();
+      renderGymsRow();
     }
 
     // ---- theme (light / dark) ----
@@ -609,41 +595,78 @@
       if (s < 86400) { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h + 'h' + (m ? ' ' + m + 'm' : ''); }
       const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600); return d + 'd' + (h ? ' ' + h + 'h' : '');
     }
-    // "Right now" strip: live count vs the typical count for the current Tallinn
-    // weekday+hour (independent of the selected chart period).
-    function renderNow(status) {
+    // One chip per gym, merging two jobs: live status (count now vs typical for the
+    // current Tallinn weekday+hour) and the chart filter (click to show/hide its line).
+    // Built from the union of gyms that are live and gyms present in the chart, so a
+    // gym missing from either side still gets a chip.
+    function renderGymsRow() {
       const row = document.getElementById('nowRow');
-      if (!typical || !status.locations || !status.locations.length || !status.latest) { row.innerHTML = ''; return; }
-      const dp = status.latest.slice(0, 10).split('-').map(Number);
-      const hour = parseInt(status.latest.slice(11, 13), 10);
-      const dayIdx = (new Date(dp[0], dp[1] - 1, dp[2]).getDay() + 6) % 7; // Mon=0
-      const chips = status.locations.map((l, i) => {
-        const grid = typical.byName[l.name];
-        let cmp = '';
-        if (grid && grid[dayIdx] && grid[dayIdx][hour] >= 0) {
-          const typ = grid[dayIdx][hour];
-          if (typ >= 1) {
-            let cls, arrow, word;
-            if (l.count > typ * 1.25) { cls = 'now-cmp-busier'; arrow = '↑'; word = 'busier than usual'; }
-            else if (l.count < typ * 0.75) { cls = 'now-cmp-quieter'; arrow = '↓'; word = 'quieter than usual'; }
-            else { cls = 'now-cmp-usual'; arrow = '≈'; word = 'about usual'; }
-            cmp = '<span class="' + cls + '">' + arrow + ' ' + word + ' (typ. ~' + Math.round(typ) + ')</span>';
-          } else {
-            cmp = '<span class="now-cmp-usual">usually empty now</span>';
+      if (!row) return;
+
+      const status = lastStatus || {};
+      const live = (status.locations || []);
+      const liveByName = {};
+      live.forEach(l => { liveByName[l.name] = l; });
+      const inChart = new Set(datasets.map(d => d.label));
+
+      const names = [...live.map(l => l.name), ...datasets.map(d => d.label).filter(n => !liveByName[n])];
+      if (!names.length) { row.innerHTML = ''; return; }
+
+      // Comparison needs both the typical grid and a live timestamp that isn't stale.
+      let dayIdx = null, hour = null;
+      const fresh = status.latest && status.ageSeconds != null && status.ageSeconds >= 0 && status.ageSeconds < 1800;
+      if (fresh && typical) {
+        const dp = status.latest.slice(0, 10).split('-').map(Number);
+        hour = parseInt(status.latest.slice(11, 13), 10);
+        dayIdx = (new Date(dp[0], dp[1] - 1, dp[2]).getDay() + 6) % 7; // Mon=0
+      }
+
+      row.innerHTML = '';
+      const lbl = document.createElement('span');
+      lbl.className = 'lbl';
+      lbl.textContent = 'Gyms';
+      row.appendChild(lbl);
+
+      names.forEach((name, i) => {
+        const l = liveByName[name];
+        const chip = document.createElement('div');
+        const filterable = inChart.has(name);
+        chip.className = 'now-chip' + (hiddenGyms.has(name) ? ' off' : '') + (filterable ? '' : ' static');
+        chip.title = filterable
+          ? (hiddenGyms.has(name) ? 'Click to show on the chart' : 'Click to hide on the chart')
+          : 'No data in the selected period';
+
+        let html = '<span class="nm"><span class="dot" style="background:' + colorFor(name, i) + '"></span>' + name + '</span>';
+        if (l && fresh) {
+          html += '<span class="cnt">' + l.count + '</span>';
+          const grid = typical && typical.byName[name];
+          if (grid && dayIdx != null && grid[dayIdx] && grid[dayIdx][hour] >= 0) {
+            const typ = grid[dayIdx][hour];
+            if (typ >= 1) {
+              let cls, arrow, word;
+              if (l.count > typ * 1.25) { cls = 'now-cmp-busier'; arrow = '↑'; word = 'busier than usual'; }
+              else if (l.count < typ * 0.75) { cls = 'now-cmp-quieter'; arrow = '↓'; word = 'quieter than usual'; }
+              else { cls = 'now-cmp-usual'; arrow = '≈'; word = 'about usual'; }
+              html += '<span class="' + cls + '">' + arrow + ' ' + word + ' (typ. ~' + Math.round(typ) + ')</span>';
+            } else {
+              html += '<span class="now-cmp-usual">usually empty now</span>';
+            }
           }
         }
-        return '<div class="now-chip"><span class="nm"><span class="dot" style="background:' + colorFor(l.name, i) + '"></span>' + l.name + '</span><span class="cnt">' + l.count + '</span>' + cmp + '</div>';
-      }).join('');
-      row.innerHTML = '<span class="lbl">Right now:</span>' + chips;
+        chip.innerHTML = html;
+        if (filterable) chip.onclick = () => toggleGym(name);
+        row.appendChild(chip);
+      });
     }
 
     async function pollStatus() {
       const el = document.getElementById('freshness');
       try {
         const s = await (await fetch('status', { cache: 'no-store' })).json();
+        lastStatus = s;
         if (!s.latest || s.ageSeconds == null || s.ageSeconds < 0) {
           el.className = 'fresh fresh-stale'; el.innerHTML = '<span class="dot"></span>No data collected'; el.title = '';
-          document.getElementById('nowRow').innerHTML = ''; return;
+          renderGymsRow(); return;
         }
         const age = s.ageSeconds;
         let cls, label;
@@ -653,10 +676,12 @@
         el.className = 'fresh ' + cls;
         el.innerHTML = '<span class="dot"></span>' + label;
         el.title = (s.locations || []).map(l => l.name + ': ' + l.count).join('   ·   ');
-        if (age < 1800) renderNow(s); else document.getElementById('nowRow').innerHTML = '';
+        // Always render the row: when data is stale the live counts drop off, but the
+        // chart filters must stay available.
+        renderGymsRow();
       } catch (e) {
         el.className = 'fresh fresh-stale'; el.innerHTML = '<span class="dot"></span>status unavailable';
-        document.getElementById('nowRow').innerHTML = '';
+        renderGymsRow();
       }
     }
 
