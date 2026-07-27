@@ -1086,6 +1086,33 @@ func addFileToZip(zipWriter *zip.Writer, filePath string) error {
 	return err
 }
 
+// publicFiles is the allowlist of static assets the server will serve. The working
+// directory also holds gym-config.env (API token), the collected CSVs and the
+// server binary, so serving the directory wholesale would expose the token and a
+// full file listing to anyone who can reach the port. Anything not listed here
+// 404s; the CSVs remain available as a bundle via /download-csvs.
+var publicFiles = map[string]string{
+	"/dashboard.html": "dashboard.html",
+	"/busyness.html":  "busyness.html",
+	"/manifest.json":  "manifest.json",
+	"/icon.svg":       "icon.svg",
+	"/icon-192.png":   "icon-192.png",
+	"/icon-512.png":   "icon-512.png",
+}
+
+func staticHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/" {
+		http.Redirect(w, r, "/dashboard.html", http.StatusFound)
+		return
+	}
+	name, ok := publicFiles[r.URL.Path]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	http.ServeFile(w, r, name)
+}
+
 func corsHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -1107,9 +1134,8 @@ func main() {
 		port = os.Args[1]
 	}
 
-	// Static file server
-	fs := http.FileServer(http.Dir("."))
-	http.Handle("/", corsHandler(fs))
+	// Static assets (allowlist only — see staticHandler)
+	http.Handle("/", corsHandler(http.HandlerFunc(staticHandler)))
 
 	// Data generation endpoints
 	http.HandleFunc("/generate-data", generateDataHandler)

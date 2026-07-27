@@ -78,7 +78,9 @@ so code history stays clean). `backup.sh` commits the runtime CSVs and pushes to
 - **Dashboard**: `dashboard.html` (`/dashboard.html`) - Occupancy-over-time chart with:
   - a month/year switcher, a day stepper (◀ / ▶ with the date shown, plus Today), manual From/To, and CSV download
   - adaptive downsampling so wide ranges stay readable and fast
-  - a **data-freshness badge** (Live / Delayed / Collection stalled, by age) and a **"Right now"** strip comparing each gym's live count to its typical level
+  - a **data-freshness badge** (Live / Delayed / Collection stalled, by age)
+  - a **"Gyms" chip row** doing double duty: each chip shows that gym's live count and how it compares to its typical level for the current weekday+hour, and clicking it shows/hides that gym's line on the chart (remembered; hidden gyms keep their live count legible). It replaces the chart legend, so there is nothing to scroll to
+  - a **loading overlay** on the chart while a range is fetched
   - an **Insights panel** per gym (busiest/quietest day, busiest hour, best time to go, typical peak)
   - shareable URLs (`?month=YYYY-MM`, `?year=YYYY`, `?day=YYYY-MM-DD`, `?from=YYYY-MM-DD&to=YYYY-MM-DD`, `?period=all`) with browser Back/Forward support
 - **Busyness**: `busyness.html` (`/busyness.html`) - Typical-busyness heatmap by weekday × hour, per location, with an All-data / year / month switcher. Averages readings in the selected period into one "typical week" (data from `GET /busyness-data`)
@@ -121,6 +123,13 @@ averages), which also backs the busyness heatmap.
   result is cached per range + newest-CSV mtime.
 - `POST /generate-data` - same for today's file.
 - `GET /download-csvs` - all `gym-stats-*.csv` as a zip.
+
+Static assets are served from an **allowlist** (the two pages, `manifest.json` and
+the icons); `/` redirects to the dashboard. Everything else in the working
+directory — notably `gym-config.env` with the API token, the raw CSVs and the
+binary — returns 404, and there is no directory listing. Use `/download-csvs` to
+get the data. Keep this in mind if you add a new asset: it must be added to
+`publicFiles` in `server.go` to be reachable.
 
 ## Tests
 
