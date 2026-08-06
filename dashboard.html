@@ -132,6 +132,9 @@
     .now-cmp-busier { color: var(--cmp-busier); }
     .now-cmp-quieter { color: var(--cmp-quieter); }
     .now-cmp-usual { color: var(--text-2); }
+    .quietest { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--cmp-quieter); border: 1px solid var(--cmp-quieter); border-radius: 999px; padding: 6px 12px; }
+    .quietest .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+    .now-chip.is-quietest { border-color: var(--cmp-quieter); }
     @media (max-width: 640px) {
       body { margin: 12px; }
       h1 { font-size: 22px; }
@@ -364,7 +367,7 @@
                   weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
                   hour: '2-digit', minute: '2-digit', hour12: false
                 }),
-                label: (item) => item.dataset.label + ': ' + item.raw.y
+                label: (item) => item.dataset.label + ': ' + Math.round(item.raw.y)
               }
             }
           },
@@ -622,17 +625,40 @@
         dayIdx = (new Date(dp[0], dp[1] - 1, dp[2]).getDay() + 6) % 7; // Mon=0
       }
 
+      // "Quietest now": least crowded relative to each gym's own typical peak, so
+      // bigger gyms don't always win. Only over gyms with fresh live data + a peak.
+      let quietest = null;
+      if (fresh && typical) {
+        let best = Infinity;
+        names.forEach(name => {
+          const l = liveByName[name], grid = typical.byName[name];
+          if (!l || !grid) return;
+          let peak = 0;
+          for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) if (grid[d][h] > peak) peak = grid[d][h];
+          if (peak < 1) return;
+          const ratio = l.count / peak;
+          if (ratio < best) { best = ratio; quietest = name; }
+        });
+      }
+
       row.innerHTML = '';
       const lbl = document.createElement('span');
       lbl.className = 'lbl';
       lbl.textContent = 'Gyms';
       row.appendChild(lbl);
+      if (quietest) {
+        const q = document.createElement('span');
+        q.className = 'quietest';
+        q.title = 'Least crowded right now relative to how busy it usually gets';
+        q.innerHTML = '<span class="dot" style="background:' + colorFor(quietest, names.indexOf(quietest)) + '"></span>Quietest now: <b>' + quietest + '</b>';
+        row.appendChild(q);
+      }
 
       names.forEach((name, i) => {
         const l = liveByName[name];
         const chip = document.createElement('div');
         const filterable = inChart.has(name);
-        chip.className = 'now-chip' + (hiddenGyms.has(name) ? ' off' : '') + (filterable ? '' : ' static');
+        chip.className = 'now-chip' + (hiddenGyms.has(name) ? ' off' : '') + (filterable ? '' : ' static') + (name === quietest ? ' is-quietest' : '');
         chip.title = filterable
           ? (hiddenGyms.has(name) ? 'Click to show on the chart' : 'Click to hide on the chart')
           : 'No data in the selected period';
