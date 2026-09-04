@@ -17,7 +17,7 @@ A complete gym occupancy monitoring system with data collection, web dashboard, 
 3. Build and start the web server:
 ```bash
 go build -o gym-server server.go
-./gym-server 8002
+./gym-server 8822
 ```
 
 ### Linux server (systemd)
@@ -46,7 +46,7 @@ Install — or update after editing the repo:
 It builds the server, copies code + config into the runtime folder (data CSVs
 there are left untouched), writes the LaunchAgents (collector, dashboard server,
 daily backup), and (re)loads them.
-Dashboard: http://localhost:8002/dashboard.html
+Dashboard: http://localhost:8822/dashboard.html
 
 Manage:
 ```bash

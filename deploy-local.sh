@@ -47,7 +47,7 @@ cat > "$AGENTS/com.ronimis.gym-server.plist" <<EOF
 <plist version="1.0">
 <dict>
     <key>Label</key><string>com.ronimis.gym-server</string>
-    <key>ProgramArguments</key><array><string>$RT/gym-server</string><string>8002</string></array>
+    <key>ProgramArguments</key><array><string>$RT/gym-server</string><string>8822</string></array>
     <key>WorkingDirectory</key><string>$RT</string>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
@@ -80,4 +80,4 @@ for L in com.ronimis.gym-stats-collector com.ronimis.gym-server com.ronimis.gym-
   launchctl bootstrap "gui/$(id -u)" "$AGENTS/$L.plist"
 done
 
-echo "Done. Dashboard: http://localhost:8002/dashboard.html"
+echo "Done. Dashboard: http://localhost:8822/dashboard.html"

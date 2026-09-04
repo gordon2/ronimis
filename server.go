@@ -1129,7 +1129,7 @@ func corsHandler(next http.Handler) http.Handler {
 }
 
 func main() {
-	port := "8002"
+	port := "8822"
 	if len(os.Args) > 1 {
 		port = os.Args[1]
 	}
