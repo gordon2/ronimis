@@ -97,6 +97,8 @@
     .day-label:hover { color: var(--text); text-decoration: underline; }
     .day-label.active { color: var(--text); }
 
+    .caveat { margin: 10px 2px 0; font-size: 12px; line-height: 1.5; color: var(--text-2); max-width: 90ch; }
+    .caveat b { color: var(--text); font-weight: 600; }
     .insights { margin-top: 26px; }
     .insights h2 { font-size: 16px; margin: 0 0 12px; }
     .cards { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -183,6 +185,12 @@
       <canvas id="chart"></canvas>
       <div id="chartLoader" class="loader" hidden><span class="spinner"></span>Loading…</div>
     </div>
+
+    <p class="caveat">The gyms count entries, not exits: a visitor is dropped from the
+    counter 3 hours after arriving (measured — the same 180 min at all four gyms). So
+    this is <b>arrivals in the last 3 hours</b>, not people currently inside. It tracks
+    reality closely while a gym is filling up, and overstates it while the flow drops
+    off — an evening reading of ~10 can mean ~3 people actually there.</p>
 
     <div class="insights">
       <h2 id="insightsTitle">Insights</h2>
@@ -356,7 +364,7 @@
               ticks: { autoSkip: true, maxRotation: 0, color: tc.text },
               grid: { color: tc.grid }
             },
-            y: { beginAtZero: true, title: { display: true, text: 'People', color: tc.text }, ticks: { color: tc.text }, grid: { color: tc.grid } }
+            y: { beginAtZero: true, title: { display: true, text: 'Entries (last 3h)', color: tc.text }, ticks: { color: tc.text }, grid: { color: tc.grid } }
           },
           plugins: {
             annotation: { annotations: getDaySeparators() },
@@ -367,7 +375,9 @@
                   weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
                   hour: '2-digit', minute: '2-digit', hour12: false
                 }),
-                label: (item) => item.dataset.label + ': ' + Math.round(item.raw.y)
+                label: (item) => item.dataset.label + ': ' + Math.round(item.raw.y),
+                // Named once per tooltip rather than on every series line.
+                footer: () => 'entries in the last 3h, not people inside'
               }
             }
           },
