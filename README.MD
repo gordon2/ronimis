@@ -83,7 +83,7 @@ so code history stays clean). `backup.sh` commits the runtime CSVs and pushes to
   - a **loading overlay** on the chart while a range is fetched
   - an **Insights panel** per gym (busiest/quietest day, busiest hour, best time to go, typical peak)
   - shareable URLs (`?month=YYYY-MM`, `?year=YYYY`, `?day=YYYY-MM-DD`, `?from=YYYY-MM-DD&to=YYYY-MM-DD`, `?period=all`) with browser Back/Forward support
-- **Busyness**: `busyness.html` (`/busyness.html`) - Typical-busyness heatmap by weekday × hour, per location, with an All-data / year / month switcher. Averages readings in the selected period into one "typical week" (data from `GET /busyness-data`)
+- **Busyness**: `busyness.html` (`/busyness.html`) - Typical-busyness heatmap by weekday × hour, per location, with an All-data / year / month switcher. Averages readings in the selected period into one "typical week" (data from `GET /busyness-data`). Has a **Counter / Est. people inside** toggle — see *What the counter measures* below
 - **Linux deploy**: `deploy.sh` - Uploads source and restarts the systemd services on the remote server
 - **macOS always-on**: `deploy-local.sh` - Installs/updates the collector + dashboard as launchd services running from a runtime folder outside `~/Documents`
 - **Backup**: `backup.sh` - Commits the collected CSVs to the repo's `data` branch and pushes (run daily by a launchd agent)
@@ -101,6 +101,31 @@ Expected CSV columns:
 - `user_count` - Current occupancy count
 - `status` - API response status (success/error)
 - `response` - Raw JSON response
+
+## What the counter measures (important)
+
+The gyms count arrivals and **never exits**: a visitor drops off the counter
+exactly 3 hours after arriving. So every number here — the chart, the chips, the
+heatmap — is **arrivals in the preceding 3 hours**, not people currently inside.
+It tracks reality closely while a gym fills up and overstates it badly once the
+flow tails off (an evening reading of ~10 can mean ~3 people actually there).
+
+The 180-minute window was measured, not assumed: an isolated burst of arrivals
+produces a matching drop precisely 180 min later at all four gyms, and the
+counter falls to zero a median ~180 min after the day's last arrival. Departures
+are provably not observed — in the window where expiry is mathematically
+impossible (the first 3 h after a genuine zero) the counter essentially never
+decreases (≤0.6 % of steps, never by more than 2).
+
+**Consequence:** the *dwell time* — how long people actually stay — is
+**unidentifiable** from this data, because it never enters the signal. The
+busyness page therefore offers it as an explicit assumption (`Session` 1h…3h)
+rather than pretending to know it; at 3 h the estimate collapses back onto the
+raw counter, which is a built-in sanity check. Comparisons of like with like
+(*busier/quieter than usual*, *quietest now*) stay valid regardless, since both
+sides use the same counter.
+
+Working notes, scripts and computed profiles are in `analysis/`.
 
 ## Analysis
 

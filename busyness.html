@@ -144,6 +144,8 @@
 
     <div class="period" id="yearRow"></div>
     <div class="month-row" id="monthRow"></div>
+    <div class="period" id="modeRow"></div>
+    <div class="period" id="dwellRow"></div>
     <div class="showing" id="showing"></div>
 
     <div class="peak" id="peak"></div>
@@ -162,12 +164,15 @@
 
     <section class="about">
       <h2>How this is built</h2>
-      <p>A collector polls each gym's live headcount every 2 minutes and logs it. This page takes <b>every reading in the selected period</b>, groups it by weekday and hour, and shows the <b>average</b> for each slot — so one cell is the typical number of people at, say, Tuesday 19:00. It is a single blended "typical week", not one specific week.</p>
+      <p>A collector polls each gym's counter every 2 minutes and logs it. This page takes <b>every reading in the selected period</b>, groups it by weekday and hour, and shows the <b>average</b> for each slot. It is a single blended "typical week", not one specific week.</p>
+      <p><b>What the counter actually is.</b> The gyms count arrivals and never exits — a visitor drops off the counter exactly 3 hours after arriving. We measured that window rather than assuming it: an isolated burst of arrivals produces a matching drop precisely 180 minutes later, at all four gyms, and the counter falls to zero a median ~180 min after the day's last arrival. So the raw number is <b>arrivals in the preceding 3 hours</b>, which tracks reality while a gym fills up and overstates it once the flow tails off.</p>
+      <p><b>Est. people inside</b> corrects for that. The rolling 3-hour sum is undone to recover arrivals per hour (a regularised non-negative deconvolution), and only the most recent <b>session length</b> of arrivals is added back. That session length is <b>an assumption, not a measurement</b>: because exits are never recorded, the data contains no information about how long anyone stays, so it is offered as a choice. At 3h the estimate collapses back onto the raw counter, which is a useful sanity check.</p>
       <ul>
         <li>Times are shown in Europe/Tallinn.</li>
-        <li>Colour is scaled to <b>each gym's own busiest slot</b>, so every gym's pattern is readable; the number in the cell is the actual average headcount.</li>
+        <li>Colour is scaled to <b>each gym's own busiest slot</b> in the current mode, so every gym's pattern stays readable.</li>
         <li>A faint “·” cell means no readings were collected for that slot in the selected period.</li>
         <li><b>All data</b> blends everything together (e.g. busy autumn with quiet winter); pick a single month to see just that month's pattern.</li>
+        <li>The deconvolution is reliable in <b>shape</b>, not to the last person in a single cell: undoing a rolling sum is ill-conditioned, which is why it is smoothed and why it is only offered on these averaged profiles rather than on live data.</li>
       </ul>
     </section>
   </div>
@@ -181,6 +186,8 @@
     let payload = null;
     let selected = 0;
     let period = { mode: 'all', year: null, month: null };
+    let mode = 'board';   // 'board' = raw counter, 'occ' = estimated people inside
+    let dwell = 1.5;      // assumed session length in hours (see deconvolution note)
 
     function isDark() {
       const t = document.documentElement.getAttribute('data-theme');
@@ -230,6 +237,136 @@
       b.textContent = label;
       b.onclick = onclick;
       return b;
+    }
+
+    // ---- estimated occupancy -------------------------------------------------
+    // The gyms count arrivals and never exits: a visitor leaves the counter
+    // exactly 3h after arriving (measured — 180 min at all four gyms). So a cell
+    // is "arrivals in the last 3h". To get people actually inside we first undo
+    // that rolling sum to recover arrivals per hour, then re-add only the last
+    // DWELL hours of them.
+    //
+    // Undoing it is an ill-conditioned deconvolution, so it is solved as a
+    // regularised non-negative least squares problem: minimise |A·a - C|^2 plus
+    // a roughness penalty, with a >= 0. On 24 hourly unknowns the normal
+    // equations are tiny, so they are solved exactly (Gauss elimination +
+    // active set) rather than iteratively.
+    const WINDOW_H = 3;     // measured counter window, hours
+    const ANCHOR_H = 4;     // rotate the day to start at 04:00, where C is reliably 0
+    // Roughness weight. Measured trade-off over λ = 0.25..8: the peak estimate
+    // moves only ~10% (T1: 25.8 -> 22.4) so conclusions barely depend on it,
+    // while the fit error grows 4x. λ=1 keeps max reconstruction error ~3-5% of
+    // peak without letting the recovered arrivals get jagged.
+    const LAMBDA = 1.0;
+
+    function gauss(M, b) {
+      const n = b.length, A = M.map((row, i) => row.concat([b[i]]));
+      for (let col = 0; col < n; col++) {
+        let p = col;
+        for (let r = col + 1; r < n; r++) if (Math.abs(A[r][col]) > Math.abs(A[p][col])) p = r;
+        [A[col], A[p]] = [A[p], A[col]];
+        if (Math.abs(A[col][col]) < 1e-12) continue;
+        for (let r = col + 1; r < n; r++) {
+          const f = A[r][col] / A[col][col];
+          if (f) for (let c = col; c <= n; c++) A[r][c] -= f * A[col][c];
+        }
+      }
+      const x = new Array(n).fill(0);
+      for (let r = n - 1; r >= 0; r--) {
+        if (Math.abs(A[r][r]) < 1e-12) continue;
+        let s = A[r][n];
+        for (let c = r + 1; c < n; c++) s -= A[r][c] * x[c];
+        x[r] = s / A[r][r];
+      }
+      return x;
+    }
+
+    // C: 24 counter averages by hour (missing as 0) -> arrivals per hour, same indexing
+    function deconvolveDay(C) {
+      const n = 24, L = WINDOW_H;
+      const rot = i => (i + ANCHOR_H) % n;                       // solve on an anchored day
+      const c = Array.from({ length: n }, (_, i) => Math.max(0, C[rot(i)] || 0));
+      const AtA = Array.from({ length: n }, () => new Array(n).fill(0));
+      const Atc = new Array(n).fill(0);
+      for (let i = 0; i < n; i++) {
+        const js = [];
+        for (let j = Math.max(0, i - L + 1); j <= i; j++) js.push(j);
+        for (const j of js) {
+          Atc[j] += c[i];
+          for (const k of js) AtA[j][k] += 1;
+        }
+      }
+      for (let i = 1; i < n - 1; i++) {                          // second-difference penalty
+        const w = [[i - 1, 1], [i, -2], [i + 1, 1]];
+        for (const [j, wj] of w) for (const [k, wk] of w) AtA[j][k] += LAMBDA * wj * wk;
+      }
+      let free = Array.from({ length: n }, (_, i) => i), x = [];
+      for (let pass = 0; pass < 12; pass++) {                     // active set for a >= 0
+        x = gauss(free.map(j => free.map(k => AtA[j][k])), free.map(j => Atc[j]));
+        const neg = free.filter((j, i) => x[i] < 0);
+        if (!neg.length) break;
+        free = free.filter(j => !neg.includes(j));
+        if (!free.length) return new Array(n).fill(0);
+      }
+      const aRot = new Array(n).fill(0);
+      free.forEach((j, i) => { aRot[j] = Math.max(0, x[i]); });
+      const a = new Array(n).fill(0);
+      for (let i = 0; i < n; i++) a[rot(i)] = aRot[i];           // rotate back
+      return a;
+    }
+
+    // People inside = arrivals over the last DWELL hours (fractional hours allowed).
+    function occupancyFromArrivals(a, dwellH) {
+      const n = 24, whole = Math.floor(dwellH), frac = dwellH - whole;
+      return Array.from({ length: n }, (_, h) => {
+        let s = 0;
+        for (let k = 0; k < whole; k++) s += a[(h - k + n) % n];
+        if (frac > 0) s += frac * a[(h - whole + n) % n];
+        return s;
+      });
+    }
+
+    // Grid actually rendered: either the raw counter or the occupancy estimate.
+    function displayGrid(loc) {
+      // At a 3h session the estimate is the counter itself, exactly — show it
+      // straight rather than round-tripping it through the deconvolution.
+      if (mode === 'board' || dwell >= WINDOW_H) return loc.avg;
+      return loc.avg.map(row => {
+        const a = deconvolveDay(row.map(v => (v < 0 ? 0 : v)));
+        const occ = occupancyFromArrivals(a, dwell);
+        return row.map((v, h) => (v < 0 ? -1 : occ[h]));   // keep "no data" cells blank
+      });
+    }
+
+    function renderModeRow() {
+      const mr = document.getElementById('modeRow');
+      mr.innerHTML = '';
+      const lbl = document.createElement('span');
+      lbl.className = 'lbl';
+      lbl.textContent = 'Show';
+      mr.appendChild(lbl);
+      mr.appendChild(pbtn('Counter (arrivals, 3h)', mode === 'board',
+        () => { mode = 'board'; renderModeRow(); render(); }));
+      mr.appendChild(pbtn('Est. people inside', mode === 'occ',
+        () => { mode = 'occ'; renderModeRow(); render(); }));
+
+      const dr = document.getElementById('dwellRow');
+      dr.innerHTML = '';
+      if (mode !== 'occ') return;
+      const dl = document.createElement('span');
+      dl.className = 'lbl';
+      dl.textContent = 'Session';
+      dr.appendChild(dl);
+      [[1, '1h'], [1.5, '1½h'], [2, '2h'], [2.5, '2½h'], [3, '3h']].forEach(([v, t]) => {
+        dr.appendChild(pbtn(t, dwell === v, () => { dwell = v; renderModeRow(); render(); }));
+      });
+      const note = document.createElement('span');
+      note.className = 'lbl';
+      note.style.marginLeft = '6px';
+      note.textContent = dwell === 3
+        ? '— at 3h this equals the counter, by definition'
+        : 'assumed — exits are not tracked, so it cannot be measured';
+      dr.appendChild(note);
     }
 
     function renderPeriod() {
@@ -284,6 +421,7 @@
       payload = await res.json();
       if (selected >= payload.locations.length) selected = 0;
       renderPeriod();
+      renderModeRow();
       document.getElementById('showing').textContent = showingText();
       renderTabs();
       render();
@@ -305,17 +443,23 @@
       const loc = payload.locations[selected];
       const days = payload.days, hours = payload.hours;
       const stops = activeRamp();
-      const scale = loc.max > 0 ? loc.max : 1;
+      const grid = displayGrid(loc);
 
       // peak
       let peak = { v: -1, d: null, h: 0 };
       for (let d = 0; d < days.length; d++)
         for (let h = 0; h < 24; h++)
-          if (loc.avg[d][h] > peak.v) peak = { v: loc.avg[d][h], d: days[d], h };
+          if (grid[d][h] > peak.v) peak = { v: grid[d][h], d: days[d], h };
+      // Colour is scaled to this gym's own busiest slot in the current mode.
+      const scale = peak.v > 0 ? peak.v : 1;
       const peakEl = document.getElementById('peak');
       if (peak.v > 0) {
+        const n = Math.round(peak.v);
         peakEl.innerHTML = 'Busiest: <b>' + DAY_FULL[peak.d] + ' ' + String(peak.h).padStart(2,'0') +
-          ':00</b> — on average <b>' + Math.round(peak.v) + '</b> ' + (Math.round(peak.v)===1?'person':'people') + ' present.';
+          ':00</b> — ' + (mode === 'occ'
+            ? 'about <b>' + n + '</b> ' + (n===1?'person':'people') + ' inside (assuming a ' +
+              (dwell === 1.5 ? '1½' : dwell) + 'h session).'
+            : 'on average <b>' + n + '</b> ' + (n===1?'arrival':'arrivals') + ' in the preceding 3h.');
       } else {
         peakEl.textContent = 'Not enough data collected for this location yet.';
       }
@@ -343,7 +487,7 @@
         tr.appendChild(dh);
         for (let h = 0; h < 24; h++) {
           const td = document.createElement('td');
-          const v = loc.avg[d][h], s = loc.samples[d][h];
+          const v = grid[d][h], s = loc.samples[d][h];
           if (v < 0 || s === 0) {
             td.className = 'empty';
             td.textContent = '·';
@@ -354,7 +498,10 @@
             td.style.color = textOn(rgb);
             td.textContent = Math.round(v);
             td.dataset.tip = '<span class="big">' + DAY_FULL[day] + ' ' + String(h).padStart(2,'0') + ':00</span><br>' +
-              'avg ' + v + ' ' + (v===1?'person':'people') + '<br>' + s + ' reading' + (s===1?'':'s');
+              (mode === 'occ'
+                ? '≈ ' + v.toFixed(1) + ' inside<br>counter read ' + loc.avg[d][h]
+                : 'avg ' + v + ' ' + (v===1?'arrival':'arrivals') + ' in the last 3h') +
+              '<br>' + s + ' reading' + (s===1?'':'s');
           }
           tr.appendChild(td);
         }
@@ -365,7 +512,7 @@
       // legend
       const g = stops.map((c,i) => c + ' ' + Math.round(i/(stops.length-1)*100) + '%').join(', ');
       document.getElementById('legendBar').style.background = 'linear-gradient(90deg, ' + g + ')';
-      document.getElementById('legendMax').textContent = loc.max > 0 ? ('peak ≈ ' + Math.round(loc.max)) : '';
+      document.getElementById('legendMax').textContent = peak.v > 0 ? ('peak ≈ ' + Math.round(peak.v)) : '';
     }
 
     // tooltip

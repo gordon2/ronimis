@@ -78,9 +78,25 @@ cat > "$AGENTS/com.ronimis.gym-backup.plist" <<EOF
 EOF
 
 echo "(Re)loading services..."
+# bootout returns before launchd has finished tearing the job down, and
+# bootstrapping into that gap fails with "Input/output error". So wait for the
+# job to actually disappear, then retry the bootstrap a few times.
 for L in com.ronimis.gym-stats-collector com.ronimis.gym-server com.ronimis.gym-backup; do
   launchctl bootout "gui/$(id -u)/$L" 2>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$AGENTS/$L.plist"
+  for _ in $(seq 1 20); do
+    launchctl print "gui/$(id -u)/$L" >/dev/null 2>&1 || break
+    sleep 0.25
+  done
+  loaded=""
+  for _ in $(seq 1 8); do
+    if launchctl bootstrap "gui/$(id -u)" "$AGENTS/$L.plist" 2>/dev/null; then loaded=yes; break; fi
+    sleep 0.5
+  done
+  if [ -z "$loaded" ]; then
+    echo "!! could not load $L — retrying once with error output:" >&2
+    launchctl bootstrap "gui/$(id -u)" "$AGENTS/$L.plist" || {
+      echo "!! $L failed to load; check $LOGS/" >&2; exit 1; }
+  fi
 done
 
 # Smoke test: a wrong binary (e.g. one lacking these routes) or a crash-loop is
