@@ -11,12 +11,15 @@ cd "$(dirname "$0")"
 RT="$HOME/Library/Application Support/ronimis"
 AGENTS="$HOME/Library/LaunchAgents"
 LOGS="$HOME/Library/Logs"
+PORT="8822"   # single source of truth: the server plist below and the smoke test both use it
 mkdir -p "$RT" "$AGENTS" "$LOGS"
 
 echo "Building gym-server..."
 go build -o gym-server server.go
 
 echo "Copying code + config to runtime ($RT)..."
+# Keep the currently-deployed binary so a failed smoke test can roll back to it.
+if [ -e "$RT/gym-server" ]; then cp "$RT/gym-server" "$RT/gym-server.prev"; fi
 cp gym-server gym-stats-collector.sh gym-config.env dashboard.html busyness.html manifest.json icon.svg icon-192.png icon-512.png backup.sh "$RT"/
 chmod +x "$RT/gym-stats-collector.sh" "$RT/backup.sh"
 
@@ -47,7 +50,7 @@ cat > "$AGENTS/com.ronimis.gym-server.plist" <<EOF
 <plist version="1.0">
 <dict>
     <key>Label</key><string>com.ronimis.gym-server</string>
-    <key>ProgramArguments</key><array><string>$RT/gym-server</string><string>8822</string></array>
+    <key>ProgramArguments</key><array><string>$RT/gym-server</string><string>$PORT</string></array>
     <key>WorkingDirectory</key><string>$RT</string>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
@@ -80,4 +83,29 @@ for L in com.ronimis.gym-stats-collector com.ronimis.gym-server com.ronimis.gym-
   launchctl bootstrap "gui/$(id -u)" "$AGENTS/$L.plist"
 done
 
-echo "Done. Dashboard: http://localhost:8822/dashboard.html"
+# Smoke test: a wrong binary (e.g. one lacking these routes) or a crash-loop is
+# caught here at deploy time instead of surfacing later as a dead dashboard.
+echo "Smoke-testing http://localhost:$PORT ..."
+sc=""; bc=""
+for _ in $(seq 1 15); do
+  sc=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "http://localhost:$PORT/status" || true)
+  bc=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "http://localhost:$PORT/busyness-data" || true)
+  if [ "$sc" = "200" ] && [ "$bc" = "200" ]; then break; fi
+  sleep 1
+done
+
+if [ "$sc" = "200" ] && [ "$bc" = "200" ]; then
+  rm -f "$RT/gym-server.prev"
+  echo "Smoke test passed (/status and /busyness-data → 200)."
+  echo "Done. Dashboard: http://localhost:$PORT/dashboard.html"
+else
+  echo "!! SMOKE TEST FAILED (/status=$sc /busyness-data=$bc)" >&2
+  if [ -e "$RT/gym-server.prev" ]; then
+    cp "$RT/gym-server.prev" "$RT/gym-server"
+    launchctl kickstart -k "gui/$(id -u)/com.ronimis.gym-server"
+    echo "Rolled back to the previous binary and restarted the service." >&2
+  else
+    echo "No previous binary to roll back to (first install?) — check $LOGS/ronimis-gym-server.log" >&2
+  fi
+  exit 1
+fi
