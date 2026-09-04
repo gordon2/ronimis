@@ -97,6 +97,10 @@
     .day-label:hover { color: var(--text); text-decoration: underline; }
     .day-label.active { color: var(--text); }
 
+    /* Deliberately one narrow column. Tried flowing this into ~420px columns to
+       match the chart's full width: at 3 sentences it fragments into columns of
+       two lines each, which reads worse than a plainly narrow footnote. The
+       busyness page has enough prose for that treatment; this does not. */
     .caveat { margin: 10px 2px 0; font-size: 12px; line-height: 1.5; color: var(--text-2); max-width: 90ch; }
     .caveat b { color: var(--text); font-weight: 600; }
     .insights { margin-top: 26px; }
