@@ -95,12 +95,36 @@ Generates CSV files in format: `gym-stats-YYYYMMDD.csv`
 ## CSV Format
 
 Expected CSV columns:
-- `timestamp` - Date and time (YYYY-MM-DD HH:MM:SS)
+- `timestamp` - Date and time (YYYY-MM-DD HH:MM:SS), **Tallinn wall-clock**
+- `timezone` - UTC offset of the timestamp, e.g. `+0300`
 - `location_id` - Gym location ID
 - `location_name` - Human readable gym name
 - `user_count` - Current occupancy count
 - `status` - API response status (success/error)
 - `response` - Raw JSON response
+
+## Timezones (read before touching timestamps)
+
+The gyms are in Tallinn, so **every reading is stamped in Tallinn wall-clock time
+plus its numeric UTC offset**, no matter where the collecting laptop is. The
+collector forces `TZ=Europe/Tallinn`, which also keeps the daily file boundary at
+Tallinn midnight.
+
+This matters because it went wrong: the collector used to log the *machine's*
+local time and zone abbreviation. Carrying the laptop abroad (Albania, Sep 2026)
+silently shifted every reading by an hour. Worse, the reader called
+`time.Parse` with an `MST` layout — Go resolves a zone abbreviation **only** when
+it matches the machine's own zone and quietly substitutes a **zero** offset
+otherwise. The running server had cached Tallinn at startup, so the archive still
+looked right; the first restart abroad would have shifted a year of history by
+three hours.
+
+So: never resolve a zone abbreviation via `time.Parse`. `busynessLocalTime` is
+the single conversion used by every read path — it takes a numeric offset when
+present (any country, no table), falls back to a small table of abbreviations for
+rows already written, and logs a warning for anything it does not recognise
+rather than guessing silently. Its tests assert absolute instants and pass under
+any `TZ`.
 
 ## What the counter measures (important)
 

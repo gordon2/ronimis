@@ -98,6 +98,75 @@ func TestBusynessLocalTime(t *testing.T) {
 	})
 }
 
+func TestBusynessLocalTimeZoneOffsets(t *testing.T) {
+	tallinn := loadTallinn(t)
+
+	// Each case is the absolute instant the reading really happened at, so the
+	// assertion cannot pass just because the test machine sits in that zone.
+	cases := []struct {
+		name    string
+		ts, tz  string
+		wantUTC time.Time
+	}{
+		// Tallinn's own zones: the collector's normal output, unchanged.
+		{"EEST is UTC+3", "2026-09-13 17:17:49", "EEST", time.Date(2026, 9, 13, 14, 17, 49, 0, time.UTC)},
+		{"EET is UTC+2", "2026-12-01 09:00:00", "EET", time.Date(2026, 12, 1, 7, 0, 0, 0, time.UTC)},
+		// Written while the laptop was in Albania. Previously read as Tallinn
+		// wall-clock, putting these readings an hour earlier than they happened.
+		{"CEST is UTC+2", "2026-09-13 17:17:49", "CEST", time.Date(2026, 9, 13, 15, 17, 49, 0, time.UTC)},
+		{"CET is UTC+1", "2026-12-01 09:00:00", "CET", time.Date(2026, 12, 1, 8, 0, 0, 0, time.UTC)},
+		// The numeric form the collector writes now — works for any country.
+		{"numeric +0300", "2026-09-13 17:17:49", "+0300", time.Date(2026, 9, 13, 14, 17, 49, 0, time.UTC)},
+		{"numeric +0900", "2026-09-13 17:17:49", "+0900", time.Date(2026, 9, 13, 8, 17, 49, 0, time.UTC)},
+		{"numeric -0400", "2026-09-13 17:17:49", "-0400", time.Date(2026, 9, 13, 21, 17, 49, 0, time.UTC)},
+		{"numeric with colon", "2026-09-13 17:17:49", "+05:30", time.Date(2026, 9, 13, 11, 47, 49, 0, time.UTC)},
+		{"UTC label", "2026-09-13 17:17:49", "UTC", time.Date(2026, 9, 13, 17, 17, 49, 0, time.UTC)},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := busynessLocalTime(c.ts, c.tz, tallinn)
+			if !ok {
+				t.Fatal("expected ok == true")
+			}
+			if !got.Equal(c.wantUTC) {
+				t.Errorf("instant = %v, want %v", got.UTC(), c.wantUTC)
+			}
+			if got.Location() != tallinn {
+				t.Errorf("location = %v, want Europe/Tallinn", got.Location())
+			}
+		})
+	}
+
+	t.Run("unknown label falls back to Tallinn wall-clock", func(t *testing.T) {
+		got, ok := busynessLocalTime("2026-09-13 17:17:49", "XYZT", tallinn)
+		if !ok {
+			t.Fatal("expected ok == true")
+		}
+		if got.Hour() != 17 || got.Minute() != 17 {
+			t.Errorf("wall-clock = %02d:%02d, want 17:17", got.Hour(), got.Minute())
+		}
+	})
+}
+
+func TestNumericOffset(t *testing.T) {
+	good := map[string]int{
+		"+0000": 0, "Z": 0, "+0300": 3 * 3600, "-0400": -4 * 3600,
+		"+05:30": 5*3600 + 30*60, "-03:30": -(3*3600 + 30*60), "+1400": 14 * 3600,
+	}
+	for in, want := range good {
+		if got, ok := numericOffset(in); !ok || got != want {
+			t.Errorf("numericOffset(%q) = %d, %v; want %d, true", in, got, ok, want)
+		}
+	}
+	// Abbreviations and junk must not be mistaken for offsets.
+	for _, in := range []string{"", "EEST", "CEST", "+03", "+0361", "+1500", "0300", "++0300", "+03:0"} {
+		if got, ok := numericOffset(in); ok {
+			t.Errorf("numericOffset(%q) = %d, true; want not ok", in, got)
+		}
+	}
+}
+
 func TestPickBucketMinutes(t *testing.T) {
 	base := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 

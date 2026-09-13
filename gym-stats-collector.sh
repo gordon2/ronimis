@@ -23,6 +23,12 @@ get_location_name() {
     echo "Unknown"
 }
 
+# The gyms are in Tallinn, so readings are stamped in Tallinn wall-clock time no
+# matter where this laptop happens to be. Without this the timestamps followed
+# the machine's own timezone: carrying it to another country silently shifted
+# every reading (and the daily file boundary) by the offset difference.
+export TZ=Europe/Tallinn
+
 get_log_file() {
     echo "gym-stats-$(date +%Y%m%d).csv"
 }
@@ -53,7 +59,9 @@ COOKIES="PHPSESSID=${PHPSESSID}; XSRF-TOKEN=${XSRF_TOKEN}; laravel_session=${LAR
 # Primary: one request for all locations via the new API
 collect_data_api() {
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    timezone=$(date '+%Z')
+    # Numeric offset (e.g. +0300), not an abbreviation: it is unambiguous in
+    # every country and needs no lookup table on the reading side.
+    timezone=$(date '+%z')
     log_file="$(get_log_file)"
 
     # Ensure CSV header exists for today's file
@@ -100,7 +108,9 @@ collect_data_api() {
 # Fallback: legacy per-location API (keeps pass-type breakdown in response column)
 collect_data_legacy() {
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    timezone=$(date '+%Z')
+    # Numeric offset (e.g. +0300), not an abbreviation: it is unambiguous in
+    # every country and needs no lookup table on the reading side.
+    timezone=$(date '+%z')
     log_file="$(get_log_file)"
 
     # Ensure CSV header exists for today's file

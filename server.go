@@ -305,12 +305,7 @@ func processCSVFile(csvFile string, dataByLocation map[string][]DataPoint) error
 			continue
 		}
 
-		// Parse timestamp from CSV
 		timestamp := record[timestampIdx]
-		t, err := time.Parse("2006-01-02 15:04:05", timestamp)
-		if err != nil {
-			continue
-		}
 
 		// Load Estonia/Tallinn timezone for display (gyms are in Tallinn)
 		tallinnTZ, err := time.LoadLocation("Europe/Tallinn")
@@ -319,26 +314,21 @@ func processCSVFile(csvFile string, dataByLocation map[string][]DataPoint) error
 			tallinnTZ = time.FixedZone("EET", 2*3600) // UTC+2 as fallback
 		}
 
-		var sourceTime time.Time
-
-		// Handle timezone field if available, otherwise assume UTC (for legacy files)
+		// Same conversion the busyness/status path uses. This used to call
+		// time.Parse with an "MST" layout, which resolves a zone abbreviation
+		// only when it matches the machine's own zone and silently falls back to
+		// a ZERO offset otherwise — so the archive rendered correctly at home and
+		// would have jumped three hours the first time the server restarted
+		// abroad. busynessLocalTime resolves offsets from a table instead, so the
+		// output depends only on the file.
+		timezoneStr := ""
 		if timezoneIdx != -1 && len(record) > timezoneIdx {
-			timezoneStr := record[timezoneIdx]
-
-			// Parse timestamp with its original timezone
-			timestampWithTZ := timestamp + " " + timezoneStr
-			sourceTime, err = time.Parse("2006-01-02 15:04:05 MST", timestampWithTZ)
-			if err != nil {
-				// Fallback: treat as UTC if timezone parsing fails
-				sourceTime = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
-			}
-		} else {
-			// Legacy files without timezone field - assume UTC
-			sourceTime = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
+			timezoneStr = record[timezoneIdx]
 		}
-
-		// Always convert to Tallinn timezone for display (since gyms are in Tallinn)
-		tallinnTime := sourceTime.In(tallinnTZ)
+		tallinnTime, ok := busynessLocalTime(timestamp, timezoneStr, tallinnTZ)
+		if !ok {
+			continue
+		}
 
 		// Round to a nearest 2-minute interval
 		minute := tallinnTime.Minute()
@@ -376,18 +366,86 @@ func max2(a, b int) int {
 // busynessLocalTime converts a logged (timestamp, timezone) pair to Tallinn local
 // time. Historic rows are logged in UTC; recent ones carry EEST/EET, which are
 // Tallinn's own summer/winter zones, so their wall-clock is already local.
+// zoneOffsets gives the real UTC offset for the zone abbreviations that appear
+// in the logs. We cannot let time.Parse do this: with an "MST" layout Go only
+// resolves an abbreviation when it matches the machine's OWN zone and silently
+// assigns a ZERO offset otherwise. That made parsing depend on where the laptop
+// happened to be — the same archive read in Tallinn and read abroad came out
+// hours apart, and a mere restart abroad would have shifted a year of history.
+// The collector now stamps a numeric offset, which needs no table at all; this
+// map only has to cover rows already written.
+// warnedZones keeps the unknown-timezone warning to one line per distinct label
+// instead of one per CSV row.
+var warnedZones sync.Map
+
+var zoneOffsets = map[string]int{
+	"UTC": 0, "GMT": 0, "Z": 0,
+	"WET": 0, "WEST": 1 * 3600,
+	"CET": 1 * 3600, "CEST": 2 * 3600, // continental Europe, incl. Tirane
+	"EET": 2 * 3600, "EEST": 3 * 3600, // Tallinn
+	"MSK": 3 * 3600,
+}
+
+// numericOffset parses "+0300", "-0530", "+03:00" or "Z" into seconds east of
+// UTC. This is the unambiguous form and the one the collector writes, so any
+// future timezone works without extending the table above.
+func numericOffset(s string) (int, bool) {
+	if s == "Z" {
+		return 0, true
+	}
+	if len(s) < 3 || (s[0] != '+' && s[0] != '-') {
+		return 0, false
+	}
+	digits := strings.ReplaceAll(s[1:], ":", "")
+	if len(digits) != 4 {
+		return 0, false
+	}
+	h, err1 := strconv.Atoi(digits[:2])
+	m, err2 := strconv.Atoi(digits[2:])
+	if err1 != nil || err2 != nil || h > 14 || m > 59 {
+		return 0, false
+	}
+	off := h*3600 + m*60
+	if s[0] == '-' {
+		off = -off
+	}
+	return off, true
+}
+
+// busynessLocalTime converts a logged (timestamp, timezone) pair into Tallinn
+// local time. The result depends only on the file contents, never on the
+// machine's own timezone, so the same CSV reads identically anywhere.
 func busynessLocalTime(tsStr, tzStr string, tallinn *time.Location) (time.Time, bool) {
 	t, err := time.Parse("2006-01-02 15:04:05", tsStr)
 	if err != nil {
 		return time.Time{}, false
 	}
-	switch strings.ToUpper(strings.TrimSpace(tzStr)) {
-	case "", "UTC", "GMT", "Z":
+	key := strings.ToUpper(strings.TrimSpace(tzStr))
+	if key == "" {
+		// Legacy rows predating the timezone column were logged in UTC.
 		src := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
 		return src.In(tallinn), true
-	default:
-		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, tallinn), true
 	}
+
+	if off, ok := numericOffset(key); ok {
+		src := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0,
+			time.FixedZone(key, off))
+		return src.In(tallinn), true
+	}
+	if off, ok := zoneOffsets[key]; ok {
+		src := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0,
+			time.FixedZone(key, off))
+		return src.In(tallinn), true
+	}
+	// Unknown label: assume the reading was written in Tallinn wall-clock time,
+	// which is what a collector running at home produced. Say so once per label
+	// rather than silently skewing a whole trip's worth of data the way the
+	// previous silent fallback did.
+	if _, seen := warnedZones.LoadOrStore(key, true); !seen {
+		log.Printf("warning: unrecognised timezone %q in CSV; assuming Tallinn wall-clock. "+
+			"Add it to zoneOffsets if readings look shifted.", key)
+	}
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, tallinn), true
 }
 
 func accumulateBusyness(csvFile string, acc map[string]*[7][24]busyCell, tallinn *time.Location, from, to *time.Time, span *[2]time.Time, months map[string]bool) {
